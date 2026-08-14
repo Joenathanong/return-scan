@@ -2,11 +2,10 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { handle, requireUser, requireAdmin, badRequest, writeAudit } from "@/lib/api";
 import { bacaSettings, ambilSpreadsheetId } from "@/lib/settings";
+import { KODE_RE, PESAN_KODE_TIDAK_VALID } from "@/lib/expedisi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const KODE_RE = /^[A-Z0-9_]{2,32}$/;
 
 interface EntriConfig {
   spreadsheetId: string;
@@ -103,10 +102,7 @@ export async function PATCH(req: NextRequest) {
     for (const item of daftar) {
       const code = String(item.code ?? "").trim().toUpperCase();
       if (!KODE_RE.test(code)) {
-        throw badRequest(
-          `Kode "${code || "(kosong)"}" tidak valid. ` +
-            "Hanya huruf kapital, angka, dan garis bawah (2–32 karakter)."
-        );
+        throw badRequest(`Kode "${code || "(kosong)"}" tidak valid. ${PESAN_KODE_TIDAK_VALID}`);
       }
 
       const spreadsheetId = ambilSpreadsheetId(String(item.spreadsheetId ?? ""));

@@ -3,15 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import AuthGuard from "@/components/AuthGuard";
 import { cn } from "@/lib/utils";
+import { saranKode, bersihkanKode, KODE_RE } from "@/lib/expedisi";
 import type { Expedisi } from "@/types";
 import {
   Truck, Plus, Loader2, AlertCircle, CheckCircle2, X, Pencil, Trash2, Info,
 } from "lucide-react";
-
-/** Usulan kode dari nama — hanya saran, admin boleh menggantinya. */
-function saranKode(nama: string): string {
-  return nama.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32);
-}
 
 export default function AdminExpedisiPage() {
   return (
@@ -175,12 +171,17 @@ function Isi() {
                 value={fKode}
                 onChange={(e) => {
                   setKodeDisentuh(true);
-                  setFKode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"));
+                  setFKode(bersihkanKode(e.target.value));
                 }}
                 className="input-field font-mono"
                 placeholder="JNE_EXPRESS"
               />
-              <p className="text-xs text-slate-400 mt-1">
+              <p
+                className={cn(
+                  "text-xs mt-1",
+                  fKode && !KODE_RE.test(fKode) ? "text-amber-600" : "text-slate-400"
+                )}
+              >
                 Huruf kapital, angka, garis bawah. 2–32 karakter.
               </p>
             </div>
@@ -188,7 +189,7 @@ function Isi() {
           <div className="flex gap-2">
             <button
               onClick={buat}
-              disabled={menyimpan || !fNama.trim() || fKode.length < 2}
+              disabled={menyimpan || !fNama.trim() || !KODE_RE.test(fKode)}
               className="btn-primary"
             >
               {menyimpan && <Loader2 className="w-4 h-4 animate-spin" />} Simpan

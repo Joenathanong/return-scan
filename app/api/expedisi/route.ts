@@ -4,22 +4,11 @@ import {
   handle, requireUser, requireAdmin, badRequest, conflict,
   requireString, writeAudit,
 } from "@/lib/api";
+import { KODE_RE, saranKode, PESAN_KODE_TIDAK_VALID } from "@/lib/expedisi";
 import type { Expedisi } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/**
- * Kode ekspedisi dipakai sebagai nama tab G-Sheet, jadi hanya boleh
- * A-Z, 0-9, dan garis bawah.
- */
-const KODE_RE = /^[A-Z0-9_]{2,32}$/;
-
-/** Usulan kode dari nama — hanya SARAN untuk form, tidak dipaksakan. */
-export function saranKode(nama: string): string {
-  return String(nama).toUpperCase().replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "").slice(0, 32);
-}
 
 const toExpedisi = (e: {
   id: string; code: string; name: string; active: boolean; createdAt: Date;
@@ -62,11 +51,7 @@ export async function POST(req: NextRequest) {
     const name = requireString(body.name, "Nama ekspedisi", 191);
     const code = String(body.code ?? "").trim().toUpperCase() || saranKode(name);
 
-    if (!KODE_RE.test(code)) {
-      throw badRequest(
-        "Kode hanya boleh huruf kapital, angka, dan garis bawah (2–32 karakter)."
-      );
-    }
+    if (!KODE_RE.test(code)) throw badRequest(PESAN_KODE_TIDAK_VALID);
 
     if (await prisma.expedisi.findUnique({ where: { code } })) {
       throw conflict(`Kode "${code}" sudah dipakai ekspedisi lain.`, "CODE_TAKEN");
