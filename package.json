@@ -1,0 +1,44 @@
+{
+  "name": "scan-retur-v2",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:upgrade": "node prisma/upgrade.mjs",
+    "db:seed": "node prisma/seed.mjs",
+    "setup": "prisma db push && prisma generate && node prisma/upgrade.mjs && node prisma/seed.mjs"
+  },
+  "dependencies": {
+    "next": "^15.3.4",
+    "react": "^19",
+    "react-dom": "^19",
+    "@prisma/client": "^6.0.0",
+    "googleapis": "^140.0.1",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
+    "date-fns": "^3.6.0",
+    "lucide-react": "^0.400.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.3.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "prisma": "^6.0.0",
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/jspdf": "^2.0.0",
+    "tailwindcss": "^3.4.4",
+    "postcss": "^8",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^9",
+    "eslint-config-next": "^15.3.4"
+  }
+}

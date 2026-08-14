@@ -1,0 +1,251 @@
+// scan-retur-v2 — TiDB Cloud Starter (MySQL)
+//
+// CATATAN PENTING soal relationMode:
+//   Dipakai "prisma" (bukan foreign key sungguhan di database), sama seperti
+//   project ieg-wms. Alasannya: pasti jalan di TiDB Cloud Starter tanpa perlu
+//   diuji dulu. Konsekuensinya, integritas relasi dijaga di lapisan aplikasi
+//   (semua tulis lewat prisma.$transaction di API route).
+//   Kalau nanti mau FK sungguhan: hapus baris relationMode lalu `npm run db:push`.
+//   Yang TIDAK terpengaruh: semua @unique di bawah tetap ditegakkan oleh
+//   database — dan itulah yang menutup bug duplikat resi di sistem lama.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+// ─── USER ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique(map: "uq_user_email") @db.VarChar(191)
+  name         String  @db.VarChar(191)
+  // scrypt dari node:crypto — sengaja TIDAK pakai bcrypt/argon2
+  // supaya tidak ada native build yang harus dikompilasi saat npm install.
+  passwordHash String  @map("password_hash") @db.VarChar(255)
+  role         String  @default("operator") @db.VarChar(16) // admin | operator
+  active       Boolean @default(true)
+  // Dipaksa ganti password saat login pertama (dipakai untuk user hasil seed).
+  mustChangePassword Boolean @default(true) @map("must_change_password")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.VarChar(30)
+  lastLogin DateTime? @map("last_login")
+
+  karungDibuat Karung[] @relation("KarungCreatedBy")
+  scans        Scan[]   @relation("ScanBy")
+
+  @@index([active])
+  @@map("users")
+}
+
+// ─── EXPEDISI ────────────────────────────────────────────────────────────────
+
+model Expedisi {
+  id String @id @default(cuid())
+
+  // BEDA BESAR dari sistem lama: `code` sekarang field MANUAL yang stabil dan
+  // UNIQUE. Di sistem lama ia di-generate ulang dari `name` setiap kali
+  // disimpan (name.toUpperCase().replace(/\s+/g,"_").slice(0,20)), sehingga
+  // sekali nama diralat, nama tab G-Sheet ikut berubah dan data lama jadi
+  // "tab yatim". Sekarang ganti nama TIDAK menyentuh code.
+  code String @unique(map: "uq_expedisi_code") @db.VarChar(32)
+  name String @db.VarChar(191)
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by") @db.VarChar(30)
+
+  karung      Karung[]
+  scans       Scan[]
+  claimSheet  ClaimExpedisiSheet?
+
+  @@index([active])
+  @@map("expedisi")
+}
+
+// ─── KARUNG ──────────────────────────────────────────────────────────────────
+
+model Karung {
+  id String @id @default(cuid())
+
+  expedisiId String   @map("expedisi_id") @db.VarChar(30)
+  expedisi   Expedisi @relation(fields: [expedisiId], references: [id])
+
+  nomorKarung String @map("nomor_karung") @db.VarChar(64)
+
+  // Tanggal bisnis (WIB), disimpan sebagai teks "YYYY-MM-DD".
+  // Sengaja BUKAN DateTime: menghindari seluruh kelas bug timezone yang ada
+  // di sistem lama (toISOString() UTC vs waktu lokal). Nilainya selalu
+  // dihitung di SERVER pakai zona Asia/Jakarta, tidak pernah dari jam klien.
+  date String @db.VarChar(10)
+
+  status          String    @default("open") @db.VarChar(20) // open | locked | admin_unlocked
+  lockedAt        DateTime? @map("locked_at")
+  lockedById      String?   @map("locked_by") @db.VarChar(30)
+  printedAt       DateTime? @map("printed_at")
+  adminUnlockedAt DateTime? @map("admin_unlocked_at")
+  adminUnlockedBy String?   @map("admin_unlocked_by") @db.VarChar(30)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById String   @map("created_by") @db.VarChar(30)
+  createdBy   User     @relation("KarungCreatedBy", fields: [createdById], references: [id])
+
+  scans Scan[]
+
+  // Cegah dua karung dengan nomor sama untuk ekspedisi & tanggal yang sama.
+  // Di sistem lama ini bisa terjadi dan bikin tanda terima ambigu.
+  @@unique([expedisiId, date, nomorKarung], map: "uq_karung_exp_date_nomor")
+  @@index([date])
+  @@index([expedisiId])
+  @@index([createdById])
+  @@map("karung")
+}
+
+// ─── SCAN ────────────────────────────────────────────────────────────────────
+
+model Scan {
+  id String @id @default(cuid())
+
+  noResi String @map("no_resi") @db.VarChar(64)
+
+  // ── INTI PERBAIKAN ──────────────────────────────────────────────────────
+  // TiDB/MySQL tidak punya partial unique index seperti Postgres, jadi
+  // keunikan dijaga lewat kolom bayangan ini:
+  //   status = "success"  → noResiUnik = noResi   (ditolak kalau sudah ada)
+  //   status = "voided"   → noResiUnik = NULL     (slotnya bebas lagi)
+  // MySQL mengizinkan BANYAK baris NULL di kolom UNIQUE, jadi semantiknya
+  // persis sama dengan partial unique index.
+  //
+  // Efeknya: duplikat ditolak oleh MESIN DATABASE, bukan oleh pengecekan
+  // aplikasi yang bisa balapan. Ini yang tidak mungkin dilakukan di Firestore.
+  noResiUnik String? @unique(map: "uq_scan_resi") @map("no_resi_unik") @db.VarChar(64)
+
+  karungId String @map("karung_id") @db.VarChar(30)
+  karung   Karung @relation(fields: [karungId], references: [id])
+
+  expedisiId String   @map("expedisi_id") @db.VarChar(30)
+  expedisi   Expedisi @relation(fields: [expedisiId], references: [id])
+
+  scannedById String   @map("scanned_by") @db.VarChar(30)
+  scannedBy   User     @relation("ScanBy", fields: [scannedById], references: [id])
+  scannedAt   DateTime @default(now()) @map("scanned_at")
+
+  // Tanggal bisnis WIB — sama seperti Karung.date, dihitung di server.
+  date String @db.VarChar(10)
+
+  status String @default("success") @db.VarChar(16) // success | voided
+
+  // Pembatalan scan (menggantikan "hapus baris di G-Sheet" yang dulu
+  // membuat Firestore dan sheet berbeda selamanya). Datanya TIDAK dihapus,
+  // hanya di-void — jejaknya tetap ada untuk audit.
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by") @db.VarChar(30)
+  voidReason String?   @map("void_reason") @db.VarChar(255)
+
+  @@index([date])
+  @@index([date, expedisiId])
+  @@index([karungId])
+  @@index([expedisiId])
+  @@index([scannedById])
+  @@index([noResi])
+  @@map("scans")
+}
+
+// ─── SETTINGS (satu baris, id = 1) ───────────────────────────────────────────
+
+model Settings {
+  id Int @id @default(1)
+
+  namaPerusahaan  String @default("PT. IEG") @map("nama_perusahaan") @db.VarChar(191)
+  noteTandaTerima String @map("note_tanda_terima") @db.Text
+
+  // G-Sheet sekarang HANYA tujuan EKSPOR, bukan jalur kritis scan.
+  // Kosongkan kalau tidak dipakai — aplikasi tetap berjalan normal.
+  spreadsheetId String @default("") @map("spreadsheet_id") @db.VarChar(191)
+
+  claimMasterSpreadsheetId String @default("") @map("claim_master_spreadsheet_id") @db.VarChar(191)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by") @db.VarChar(30)
+
+  @@map("settings")
+}
+
+// ─── CLAIM ───────────────────────────────────────────────────────────────────
+
+/**
+ * Sheet claim per kode ekspedisi.
+ *
+ * Kuncinya `code`, BUKAN id ekspedisi. Ini disengaja: endpoint
+ * /api/claim/upload mendeteksi ekspedisi dari prefix nomor resi dan bisa
+ * menghasilkan kode yang belum terdaftar di master ekspedisi (mis. hasil
+ * deteksi baru, atau "UNKNOWN" untuk resi yang tidak dikenali). Kalau tabel
+ * ini mewajibkan ekspedisi terdaftar, sheet yang terlanjur dibuat otomatis
+ * di Google Drive tidak akan bisa disimpan konfigurasinya dan hilang begitu
+ * halaman dimuat ulang — persis alur yang berjalan di sistem lama.
+ *
+ * `expedisiId` diisi kalau kodenya memang cocok dengan master ekspedisi.
+ */
+model ClaimExpedisiSheet {
+  code String @id @db.VarChar(32)
+
+  expedisiId String?   @unique @map("expedisi_id") @db.VarChar(30)
+  expedisi   Expedisi? @relation(fields: [expedisiId], references: [id])
+
+  spreadsheetId String   @map("spreadsheet_id") @db.VarChar(191)
+  url           String   @db.VarChar(500)
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("claim_expedisi_sheets")
+}
+
+// ─── EKSPOR G-SHEET ──────────────────────────────────────────────────────────
+
+/**
+ * Catatan setiap kali satu tab G-Sheet ditulis ulang.
+ *
+ * Sistem lama menulis ke G-Sheet SATU BARIS PER SCAN (append), sehingga
+ * kena batas 60 tulis/menit dan datanya bocor diam-diam. Sistem baru
+ * menulis ULANG SELURUH TAB dengan values.update — 2 API call per tab per
+ * hari, dan idempoten: dijalankan dua kali hasilnya sama persis.
+ */
+model SheetExport {
+  id String @id @default(cuid())
+
+  tabName    String   @map("tab_name") @db.VarChar(191)
+  date       String   @db.VarChar(10)
+  expedisiId String   @map("expedisi_id") @db.VarChar(30)
+
+  rowCount   Int      @map("row_count")
+  status     String   @db.VarChar(16) // ok | failed
+  error      String?  @db.VarChar(500)
+  exportedAt DateTime @default(now()) @map("exported_at")
+  exportedBy String?  @map("exported_by") @db.VarChar(30)
+
+  @@index([date])
+  @@index([tabName])
+  @@map("sheet_exports")
+}
+
+// ─── AUDIT LOG ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  userId    String?  @map("user_id") @db.VarChar(30)
+  userName  String   @map("user_name") @db.VarChar(191)
+  action    String   @db.VarChar(64)
+  detail    String   @db.VarChar(500)
+  metadata  String?  @db.Text // JSON string — MySQL/Prisma tidak punya scalar list
+  timestamp DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([userId])
+  @@map("audit_log")
+}
