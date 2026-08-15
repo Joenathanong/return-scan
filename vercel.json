@@ -1,17 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": [
-    "regions: jalankan fungsi di Singapore, sekelas region cluster TiDB.",
-    "Sebelumnya fungsi berjalan di iad1 (Washington) sementara database ada",
-    "di ap-southeast-1 — setiap query menyeberangi Pasifik. Log login",
-    "menunjukkan 774 ms untuk satu permintaan yang isinya hanya beberapa",
-    "query. Halaman scan melakukan beberapa query per resi, jadi selisih ini",
-    "langsung terasa oleh operator yang men-scan ratusan resi berturut-turut.",
-    "",
-    "Catatan: pemilihan region hanya berlaku untuk akun berbayar. Pada paket",
-    "Hobby, Vercel mengabaikan setelan ini dan tetap memakai region default",
-    "akun — ubah lewat Project Settings kalau baris ini tidak berpengaruh."
-  ],
   "regions": ["sin1"]
 }

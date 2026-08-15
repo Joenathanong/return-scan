@@ -42,10 +42,31 @@ mysql://xxxx.root:PASSWORD@gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/
 Kalau muncul error "too many connections", turunkan `connection_limit` jadi
 `1`. Kalau muncul timeout saat ramai, naikkan sedikit.
 
-Pilih region Vercel yang dekat dengan cluster TiDB Anda (Singapore →
-`sin1`) di Project Settings → Functions. Region default `iad1` (Washington)
-berarti tiap query menyeberangi Pasifik: sekitar 250 ms bolak-balik per query,
-dan halaman scan melakukan beberapa query per resi.
+## 2b. Region fungsi
+
+`vercel.json` berisi:
+
+```json
+{ "regions": ["sin1"] }
+```
+
+Log login pertama menunjukkan permintaan diterima di Singapore lalu
+**dirutekan ke Washington (iad1)**, dan satu permintaan login memakan
+**774 ms** — hampir seluruhnya biaya pulang-pergi ke cluster TiDB di
+Singapore. Untuk login sekali itu masih tertahankan; untuk halaman scan yang
+melakukan beberapa query per resi, selisihnya langsung terasa oleh operator.
+
+Dua catatan penting:
+
+- **Pemilihan region hanya berlaku di akun berbayar.** Pada paket Hobby,
+  Vercel mengabaikan `regions` dan tetap memakai region default akun. Ubah
+  lewat Project Settings → Functions; kalau pilihannya tidak ada, memang
+  tidak tersedia di paket itu.
+- **`vercel.json` menolak properti yang tidak dikenal.** Jangan menambahkan
+  kunci `"//"` sebagai komentar — konvensi itu lazim di JSON lain, tapi di
+  sini menggagalkan deploy dengan
+  `should NOT have additional property "//"`. Semua penjelasan ditulis di
+  berkas ini, bukan di dalam JSON-nya.
 
 ## 3. `prisma generate` saat build
 
