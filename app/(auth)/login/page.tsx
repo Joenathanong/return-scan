@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ScanLine, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 
 function LoginInner() {
-  const { signIn, appUser, loading } = useAuth();
+  const { signIn, appUser, loading, gangguan } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/dashboard";
@@ -101,10 +101,24 @@ function LoginInner() {
             </div>
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex gap-2">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error}</p>
+          {(error || gangguan) && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+              <div className="flex gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{error || gangguan}</p>
+              </div>
+              {/* Kalau masalahnya di server (bukan password salah), tunjukkan
+                  jalan untuk memeriksanya sendiri. */}
+              {(gangguan || /server|hubungi|menjawab|dikenali/i.test(error)) && (
+                <a
+                  href="/api/health"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-red-600 underline"
+                >
+                  Periksa keadaan server →
+                </a>
+              )}
             </div>
           )}
 

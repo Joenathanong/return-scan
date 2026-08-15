@@ -3,6 +3,7 @@
 import React, {
   createContext, useContext, useEffect, useState, useCallback,
 } from "react";
+import { mintaJson } from "@/lib/http";
 import type { SessionUser } from "@/types";
 
 /**
@@ -23,6 +24,8 @@ import type { SessionUser } from "@/types";
 interface AuthContextValue {
   appUser: SessionUser | null;
   loading: boolean;
+  /** Terisi kalau /api/auth/me gagal karena masalah jaringan/server. */
+  gangguan: string;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -33,16 +36,19 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [appUser, setAppUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [gangguan, setGangguan] = useState("");
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
-      const data = (await res.json()) as { user: SessionUser | null };
+      const data = await mintaJson<{ user: SessionUser | null }>("/api/auth/me");
       setAppUser(data.user ?? null);
-    } catch {
-      // Jaringan putus — jangan paksa logout, biarkan halaman menampilkan
-      // keadaan terakhir. Request berikutnya yang akan menentukan.
-      setAppUser((prev) => prev);
+      setGangguan("");
+    } catch (e) {
+      // Jaringan putus atau server bermasalah — JANGAN paksa logout.
+      // Keadaan terakhir dipertahankan; permintaan berikutnya yang menentukan.
+      // Pesannya disimpan supaya halaman login bisa menjelaskan, alih-alih
+      // hanya menampilkan form yang gagal terus tanpa alasan.
+      setGangguan(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -53,19 +59,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const res = await fetch("/api/auth/login", {
+    const data = await mintaJson<{ user: SessionUser }>("/api/auth/login", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: { email, password },
     });
-    const data = (await res.json()) as { user?: SessionUser; error?: string };
-    if (!res.ok) throw new Error(data.error || "Gagal login.");
     setAppUser(data.user ?? null);
+    setGangguan("");
   }, []);
 
   const signOut = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await mintaJson("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Gagal memberi tahu server bukan alasan untuk menahan orang tetap
+      // masuk — sesi lokal tetap dibuang.
     } finally {
       setAppUser(null);
       window.location.href = "/login";
@@ -73,7 +80,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ appUser, loading, signIn, signOut, refresh }}>
+    <AuthContext.Provider
+      value={{ appUser, loading, gangguan, signIn, signOut, refresh }}
+    >
       {children}
     </AuthContext.Provider>
   );

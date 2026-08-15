@@ -9,15 +9,62 @@ import {
 import type { SessionUser, UserRole } from "@/types";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * POST /api/auth/login
  *
- * Pesan error sengaja SAMA untuk email tidak ada dan password salah
- * ("Email atau password salah") supaya tidak bisa dipakai menebak
- * email mana yang terdaftar.
+ * Pesan error untuk email tidak ada dan password salah sengaja DISAMAKAN
+ * ("Email atau password salah") supaya tidak bisa dipakai menebak email mana
+ * yang terdaftar.
+ *
+ * Kesalahan KONFIGURASI diperlakukan sebaliknya: dijelaskan sejelas mungkin.
+ * Menyembunyikannya tidak menambah keamanan sedikit pun — penyerang tidak
+ * mendapat apa-apa dari tahu bahwa SESSION_SECRET belum diisi — sementara
+ * admin yang sedang memasang sistem jadi buta total. Sebelumnya semua error
+ * di sini dibalas "Gagal memproses login.", dan itu membuat kesalahan
+ * environment variable mustahil dibedakan dari password yang keliru.
  */
 export async function POST(req: NextRequest) {
+  // ── Periksa konfigurasi lebih dulu, sebelum menyentuh database ──────────
+  const rahasia = process.env.SESSION_SECRET ?? "";
+  if (!rahasia) {
+    console.error("[scan-retur] SESSION_SECRET belum diisi");
+    return NextResponse.json(
+      {
+        error:
+          "Server belum dikonfigurasi: SESSION_SECRET belum diisi. " +
+          "Tambahkan di Vercel → Settings → Environment Variables, lalu deploy ulang.",
+        code: "CONFIG_SESSION_SECRET",
+      },
+      { status: 500 }
+    );
+  }
+  if (rahasia.length < 32) {
+    console.error(`[scan-retur] SESSION_SECRET hanya ${rahasia.length} karakter`);
+    return NextResponse.json(
+      {
+        error:
+          `Server belum dikonfigurasi: SESSION_SECRET hanya ${rahasia.length} ` +
+          "karakter, minimal 32. Perbarui di Vercel lalu deploy ulang.",
+        code: "CONFIG_SESSION_SECRET",
+      },
+      { status: 500 }
+    );
+  }
+  if (!process.env.DATABASE_URL) {
+    console.error("[scan-retur] DATABASE_URL belum diisi");
+    return NextResponse.json(
+      {
+        error:
+          "Server belum dikonfigurasi: DATABASE_URL belum diisi. " +
+          "Tambahkan di Vercel → Settings → Environment Variables, lalu deploy ulang.",
+        code: "CONFIG_DATABASE_URL",
+      },
+      { status: 500 }
+    );
+  }
+
   let email = "";
   try {
     const body = (await req.json()) as { email?: string; password?: string };
@@ -87,7 +134,67 @@ export async function POST(req: NextRequest) {
     });
     return res;
   } catch (err) {
+    const e = err as { code?: string; message?: string };
+    const pesan = String(e?.message ?? err);
+
+    // Selalu catat lengkap ke log server — inilah yang terbaca di Vercel.
     console.error("[scan-retur] login error:", err);
-    return NextResponse.json({ error: "Gagal memproses login." }, { status: 500 });
+
+    // Database tidak terjangkau / kredensial salah → beri tahu apa adanya.
+    if (
+      e?.code === "P1001" || e?.code === "P1017" ||
+      /Can't reach database server|ECONNREFUSED|ETIMEDOUT/i.test(pesan)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Server tidak bisa menghubungi database. Periksa DATABASE_URL " +
+            "dan IP Access List di TiDB Cloud. Buka /api/health untuk rincian.",
+          code: "DB_UNREACHABLE",
+        },
+        { status: 503 }
+      );
+    }
+    if (/Access denied|authentication failed/i.test(pesan)) {
+      return NextResponse.json(
+        {
+          error:
+            "Kredensial database ditolak. Password di DATABASE_URL salah, atau " +
+            "karakter khususnya belum di-URL-encode (@ jadi %40).",
+          code: "DB_AUTH",
+        },
+        { status: 503 }
+      );
+    }
+    if (/does not exist|Unknown table|relation .* does not exist|P2021/i.test(pesan)) {
+      return NextResponse.json(
+        {
+          error:
+            "Tabel database belum dibuat. Jalankan `npm run db:push` dari " +
+            "komputer Anda ke database yang sama.",
+          code: "DB_NO_TABLE",
+        },
+        { status: 503 }
+      );
+    }
+    if (/did not initialize|@prisma\/client|prisma generate/i.test(pesan)) {
+      return NextResponse.json(
+        {
+          error:
+            "Prisma Client tidak ter-generate saat build. Pastikan package.json " +
+            'memuat "build": "prisma generate && next build", lalu deploy ulang.',
+          code: "PRISMA_NOT_GENERATED",
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        error: "Gagal memproses login. Buka /api/health untuk memeriksa server.",
+        code: "UNKNOWN",
+      },
+      { status: 500 }
+    );
   }
 }
