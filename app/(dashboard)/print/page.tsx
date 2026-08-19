@@ -10,32 +10,98 @@ import {
 } from "lucide-react";
 
 // ── Konfigurasi kapasitas per ukuran kertas ──────────────────────────────────
-// Angka-angka ini hasil kalibrasi di sistem lama terhadap printer yang
-// dipakai di lapangan. SENGAJA tidak diubah — yang berganti hanya dari mana
-// datanya datang, bukan bagaimana ia dicetak.
+//
+// Angka-angka ini DIUKUR dari hasil cetak sungguhan (Letter, 544 resi,
+// dirender 110 dpi lalu dihitung posisi garis tabelnya):
+//   • batas bawah cetak yang benar-benar terpakai  y ≈ 1189 px dari 1210 px
+//   • tinggi satu baris tabel .............. 23,1 px
+//   • kop besar (logo + judul + kotak info)  176 px lebih tinggi dari kop
+//     ringkas halaman lanjutan  →  setara 7,6 baris
+//   • kaki dokumen (total + Keterangan + tanda
+//     tangan + baris penutup) .............. 276 px  →  setara 12 baris
+//     (250 px bila baris "Halaman X dari Y" dimatikan)
+//   • baris "Halaman X dari Y" ............. 26 px   →  setara 1,1 baris
+//   • posisi awal tabel: y=66 (kop ringkas), y=242 (kop besar)
+//
+// Kapasitas = (batas bawah − posisi awal tabel − kaki) ÷ 23,1 − 1 baris judul:
+//   Letter tengah   (1189 − 66)        ÷ 23,1 − 1 = 47,6  → 47
+//   Letter pertama  (1189 − 242)       ÷ 23,1 − 1 = 40,0  → 39  (sisa 1 baris
+//                                                    cadangan; di sinilah dulu
+//                                                    luberan terjadi)
+//   Letter terakhir (1189 − 66 − 250)  ÷ 23,1 − 1 = 36,8  → 36
+//   Letter tunggal  (1189 − 242 − 250) ÷ 23,1 − 1 = 29,2  → 28
+//
+// Karena itu halaman punya TIGA kapasitas berbeda, bukan dua:
+//
+//   TC_FIRST   halaman pertama  — dikurangi 8 baris untuk kop besar
+//   TC_MIDDLE  halaman tengah   — kapasitas penuh
+//   TC_LAST    halaman terakhir — dikurangi 14 baris untuk kaki dokumen
+//   TC_ONLY    satu-satunya halaman — menanggung kop besar DAN kaki dokumen
+//
+// Sistem lama hanya punya TC_FIRST dan TC_MIDDLE, dan selisih TC_FIRST-nya
+// cuma 3 baris (41 vs 44) padahal kop besar memakan 7,6 baris. Akibatnya
+// halaman pertama selalu kelebihan satu baris, yang tumpah ke lembar
+// berikutnya bersama baris judul tabel — itulah "halaman 2 yang isinya
+// sedikit". Kaki dokumen tidak pernah diperhitungkan sama sekali; dulu tidak
+// ketahuan karena halaman terakhir kebetulan selalu kebagian sisa yang
+// sedikit.
 type PaperSize = "a4" | "letter";
 
 interface PaperConfig {
+  /** Batas maksimum untuk tampilan 1 kolom (kop besar + kaki, satu halaman). */
   SC_ONLY: number;
-  SC_FIRST: number;
-  SC_MIDDLE: number;
-  SC_LAST: number;
+  /** Baris PER KOLOM pada mode 2 kolom. */
+  TC_ONLY: number;
   TC_FIRST: number;
   TC_MIDDLE: number;
+  TC_LAST: number;
+  /**
+   * Cetak baris "Halaman X dari Y" di kaki tiap halaman?
+   * Dimatikan untuk Letter atas permintaan operator: kertas dot matrix
+   * bersambung dicetak berurutan dan tidak pernah tertukar, jadi penanda
+   * itu hanya memakan ruang yang bisa dipakai satu baris resi lagi.
+   */
+  nomorHalaman: boolean;
+  /** String CSS untuk @page size */
   cssSize: string;
+  /** Label untuk tombol pemilih */
   label: string;
 }
 
 const PAPER: Record<PaperSize, PaperConfig> = {
+  // A4 — JANGAN diubah tanpa mengukur hasil cetak A4 yang sebenarnya.
+  //
+  // SC_ONLY, TC_FIRST, dan TC_MIDDLE dikembalikan persis seperti sistem lama
+  // (22 / 44 / 48) karena operator memastikan hasil cetak A4 selama ini sudah
+  // pas. Saya sempat menurunkan TC_FIRST 44 → 40 dengan menerapkan hasil
+  // pengukuran Letter ke A4; itu keliru — A4 lebih tinggi 17,6 mm, jadi
+  // angkanya tidak bisa dipinjam begitu saja.
+  //
+  // TC_LAST dan TC_ONLY memang TIDAK ADA di sistem lama, jadi tidak ada nilai
+  // lama yang bisa dikembalikan. Keduanya wajib ada sekarang karena pembagian
+  // halaman tidak lagi menyisakan remah untuk halaman terakhir; tanpa jatah
+  // kaki dokumen, blok tanda tangan akan tumpah ke lembar berikutnya.
+  // Jatahnya 12 baris — hasil pengukuran langsung tinggi kaki dokumen
+  // (276 px ÷ 23,1 px), dan itu TIDAK bergantung pada ukuran kertas karena
+  // isinya HTML yang sama persis.
+  //   TC_LAST = TC_MIDDLE − 12 = 36
+  //   TC_ONLY = TC_FIRST  − 12 = 32   (kop besar dan kaki di satu halaman)
   a4: {
-    SC_ONLY: 22, SC_FIRST: 30, SC_MIDDLE: 38, SC_LAST: 22,
-    TC_FIRST: 44, TC_MIDDLE: 48,
+    SC_ONLY: 22,
+    TC_ONLY: 32, TC_FIRST: 44, TC_MIDDLE: 48, TC_LAST: 36,
+    nomorHalaman: true,
     cssSize: "210mm 297mm",
     label: "A4",
   },
+  // Halaman tengah 44 → 47 (batas cetak 1189 px, bukan tebakan).
+  // Halaman terakhir 30 → 36: perkiraan awal saya memberi jatah 14 baris
+  // untuk kaki dokumen, padahal pengukuran menunjukkan hanya 12 — dan
+  // tinggal 250 px setelah nomor halaman dimatikan. Selisih itulah ruang
+  // kosong yang terlihat di bawah tanda tangan.
   letter: {
-    SC_ONLY: 20, SC_FIRST: 26, SC_MIDDLE: 34, SC_LAST: 20,
-    TC_FIRST: 41, TC_MIDDLE: 44,
+    SC_ONLY: 20,
+    TC_ONLY: 28, TC_FIRST: 39, TC_MIDDLE: 47, TC_LAST: 36,
+    nomorHalaman: false,
     cssSize: "215.9mm 279.4mm",
     label: 'Letter (8.5"×11")',
   },
@@ -43,27 +109,100 @@ const PAPER: Record<PaperSize, PaperConfig> = {
 
 interface PageResult { pages: string[][][]; twoCol: boolean; }
 
+/** Kapasitas halaman ke-i dari total n halaman, dalam BARIS (2 kolom). */
+function kapasitasHalaman(i: number, n: number, cfg: PaperConfig): number {
+  const perKolom =
+    n === 1        ? cfg.TC_ONLY   :
+    i === 0        ? cfg.TC_FIRST  :
+    i === n - 1    ? cfg.TC_LAST   :
+                     cfg.TC_MIDDLE;
+  return perKolom * 2;
+}
+
 /**
  * Bagi baris menjadi halaman.
+ *
  *   ≤ SC_ONLY baris → 1 kolom, 1 halaman
- *   > SC_ONLY baris → 2 kolom, tiap halaman non-terakhir diisi penuh
+ *   selebihnya      → 2 kolom, disebar SEBANDING dengan kapasitas tiap halaman
+ *
+ * Sebanding, bukan rata: halaman pertama dan terakhir memang punya ruang
+ * lebih sempit, jadi membaginya rata justru membuat keduanya kelebihan.
+ * Dengan cara ini setiap halaman terisi pada persentase yang sama dari
+ * kapasitasnya sendiri — itulah yang terlihat sebagai "sama penuh".
+ *
+ * Jumlah halaman tetap yang paling sedikit; yang berubah hanya sebarannya,
+ * jadi tidak ada kertas tambahan yang terpakai.
  */
 function buildPages(rows: string[][], cfg: PaperConfig): PageResult {
   if (rows.length === 0) return { pages: [[]], twoCol: false };
   if (rows.length <= cfg.SC_ONLY) return { pages: [rows], twoCol: false };
 
-  const FIRST = cfg.TC_FIRST * 2;
-  const MIDDLE = cfg.TC_MIDDLE * 2;
+  const total = rows.length;
+
+  // 1. Jumlah halaman paling sedikit yang masih memuat semuanya.
+  let n = 1;
+  let daya = kapasitasHalaman(0, 1, cfg);
+  while (daya < total) {
+    n++;
+    daya = 0;
+    for (let i = 0; i < n; i++) daya += kapasitasHalaman(i, n, cfg);
+  }
+
+  const kap = Array.from({ length: n }, (_, i) => kapasitasHalaman(i, n, cfg));
+
+  // 2. Bagi dalam satuan PASANGAN (satu baris kiri + satu baris kanan),
+  //    bukan per baris.
+  //
+  //    Tampilan dua kolom membelah isi halaman di tengah: baris paruh
+  //    pertama ke kolom kiri, sisanya ke kanan. Kalau jumlah baris satu
+  //    halaman ganjil, pembelahan itu tidak bisa rata dan kolom kiri
+  //    kelebihan satu — terlihat sebagai kolom kanan yang lebih pendek.
+  //
+  //    Menghitung dalam pasangan membuat setiap halaman otomatis genap,
+  //    jadi kedua kolomnya selalu sama panjang. Semua kapasitas memang
+  //    kelipatan dua (baris per kolom × 2), jadi tidak ada yang hilang.
+  const kapPasangan = kap.map((c) => c / 2);
+  const totalPasangan = Math.ceil(total / 2);
+  const jumlahKapPasangan = kapPasangan.reduce((a, b) => a + b, 0);
+
+  const ideal = kapPasangan.map((c) => (totalPasangan * c) / jumlahKapPasangan);
+  const pasangan = ideal.map((v) => Math.floor(v));
+
+  // Sisa pembulatan diberikan ke halaman dengan pecahan terbesar dulu.
+  let sisa = totalPasangan - pasangan.reduce((a, b) => a + b, 0);
+  const urut = ideal
+    .map((v, i) => ({ pecahan: v - Math.floor(v), i }))
+    .sort((a, b) => b.pecahan - a.pecahan);
+  for (const { i } of urut) {
+    if (sisa <= 0) break;
+    if (pasangan[i] < kapPasangan[i]) { pasangan[i]++; sisa--; }
+  }
+  while (sisa > 0) {
+    let ada = false;
+    for (let i = 0; i < n && sisa > 0; i++) {
+      if (pasangan[i] < kapPasangan[i]) { pasangan[i]++; sisa--; ada = true; }
+    }
+    if (!ada) break;
+  }
+
+  // 3. Kembalikan ke satuan baris. Kalau jumlah resi seluruhnya ganjil,
+  //    tepat satu baris berlebih — dibuang dari halaman TERAKHIR, supaya
+  //    ketidakseimbangan satu baris itu jatuh di halaman penutup dan tidak
+  //    terlihat di tengah dokumen.
+  const isi = pasangan.map((p) => p * 2);
+  let kelebihan = isi.reduce((a, b) => a + b, 0) - total;
+  for (let i = n - 1; i >= 0 && kelebihan > 0; i--) {
+    const potong = Math.min(kelebihan, isi[i]);
+    isi[i] -= potong;
+    kelebihan -= potong;
+  }
 
   const pages: string[][][] = [];
   let pos = 0;
-
-  while (pos < rows.length) {
-    const capacity = pages.length === 0 ? FIRST : MIDDLE;
-    const remaining = rows.length - pos;
-    if (remaining <= capacity) { pages.push(rows.slice(pos)); break; }
-    pages.push(rows.slice(pos, pos + capacity));
-    pos += capacity;
+  for (const n2 of isi) {
+    if (n2 <= 0) continue; // halaman kosong tidak pernah dicetak
+    pages.push(rows.slice(pos, pos + n2));
+    pos += n2;
   }
   return { pages, twoCol: true };
 }
@@ -118,6 +257,9 @@ function PrintPageInner() {
   const [printing, setPrinting] = useState(false);
   const [locking, setLocking] = useState(false);
   const [paperSize, setPaperSize] = useState<PaperSize>("a4");
+  const [dialogKertas, setDialogKertas] = useState(false);
+  /** Ukuran yang diminta operator; cetak dijalankan setelah DOM ter-render. */
+  const [mintaCetak, setMintaCetak] = useState<PaperSize | null>(null);
 
   // ── Pemilih karung ────────────────────────────────────────────────────────
   const [selectorDate, setSelectorDate] = useState(today);
@@ -225,7 +367,7 @@ function PrintPageInner() {
   };
 
   // ── Cetak: kunci dulu semua karung yang masih terbuka ─────────────────────
-  const handlePrint = async () => {
+  const jalankanCetak = async () => {
     if (!data) return;
     const terbuka = data.karung.filter((k) => k.status !== "locked");
 
@@ -271,6 +413,26 @@ function PrintPageInner() {
     setPrinting(true);
     setTimeout(() => { window.print(); setPrinting(false); }, 300);
   };
+
+  /**
+   * Cetak dipicu lewat efek, bukan langsung di penangan klik.
+   *
+   * Ukuran kertas menentukan @page size, jumlah baris per halaman, dan mode
+   * hitam-putih. Kalau window.print() dipanggil pada klik yang sama dengan
+   * setPaperSize, dialog cetak peramban bisa terbuka memakai tata letak
+   * ukuran LAMA. Penjaga `mintaCetak !== paperSize` memastikan cetak baru
+   * berjalan setelah React selesai me-render ukuran yang dipilih.
+   */
+  useEffect(() => {
+    if (!mintaCetak || mintaCetak !== paperSize) return;
+    let batal = false;
+    (async () => {
+      await jalankanCetak();
+      if (!batal) setMintaCetak(null);
+    })();
+    return () => { batal = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mintaCetak, paperSize]);
 
   // ══════════════════════════════════════════════════════════════════════════
   // TAMPILAN PEMILIH
@@ -486,6 +648,69 @@ function PrintPageInner() {
 
   return (
     <>
+      {/* ── Dialog pilih ukuran kertas ─────────────────────────────────────
+          Muncul saat tombol cetak ditekan, bukan sebagai pilihan yang selalu
+          tampil. Ukuran kertas adalah keputusan sesaat sebelum mencetak —
+          menaruhnya sebagai saklar permanen membuat operator gampang lupa
+          memeriksanya dan mencetak dengan ukuran sisa dari cetakan lalu. */}
+      {dialogKertas && (
+        <div
+          className="no-print fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={() => setDialogKertas(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <Printer className="w-5 h-5 text-green-600" /> Pilih Ukuran Kertas
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
+                {rows.length} resi · {expedisiName}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {(["a4", "letter"] as PaperSize[]).map((ps) => {
+                const hal = buildPages(rows, PAPER[ps]).pages.length;
+                return (
+                  <button
+                    key={ps}
+                    onClick={() => {
+                      setPaperSize(ps);
+                      setDialogKertas(false);
+                      setMintaCetak(ps);
+                    }}
+                    className="w-full text-left px-4 py-3 rounded-xl border-2 border-slate-200
+                               hover:border-green-500 hover:bg-green-50 transition-colors"
+                  >
+                    <p className="font-medium text-slate-800">{PAPER[ps].label}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {hal} halaman
+                      {ps === "letter" && " · hitam-putih, untuk printer dot matrix"}
+                      {ps === "a4" && " · berwarna, dengan logo"}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Mencetak akan mengunci karung ini. Setelah terkunci, resi tidak
+              bisa ditambahkan lagi kecuali dibuka admin.
+            </p>
+
+            <button
+              onClick={() => setDialogKertas(false)}
+              className="btn-ghost w-full justify-center"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bar aksi */}
       <div className="no-print max-w-5xl mx-auto mb-6 flex flex-wrap gap-3 items-center justify-between">
         <div className="flex items-center gap-3">
@@ -506,23 +731,11 @@ function PrintPageInner() {
             </span>
           )}
 
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-medium">
-            {(["a4", "letter"] as PaperSize[]).map((ps) => (
-              <button
-                key={ps}
-                onClick={() => setPaperSize(ps)}
-                className={`px-3 py-1.5 transition-colors ${
-                  paperSize === ps
-                    ? "bg-slate-800 text-white"
-                    : "bg-white text-slate-500 hover:bg-slate-50"
-                }`}
-              >
-                {PAPER[ps].label}
-              </button>
-            ))}
-          </div>
-
-          <button onClick={handlePrint} disabled={printing || locking} className="btn-primary">
+          <button
+            onClick={() => setDialogKertas(true)}
+            disabled={printing || locking}
+            className="btn-primary"
+          >
             {printing || locking
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Printer className="w-4 h-4" />}
@@ -805,7 +1018,7 @@ function PrintPageInner() {
                 </>
               )}
 
-              {totalPages > 1 && (
+              {cfg.nomorHalaman && totalPages > 1 && (
                 <div style={{ marginTop: "12px", textAlign: "right", fontSize: "9px", color: isDM ? "#000" : "#cbd5e1" }}>
                   Halaman {pageIndex + 1} dari {totalPages}
                 </div>

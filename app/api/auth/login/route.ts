@@ -141,6 +141,17 @@ export async function POST(req: NextRequest) {
     console.error("[scan-retur] login error:", err);
 
     // Database tidak terjangkau / kredensial salah → beri tahu apa adanya.
+    if (/insecure transport|1105/i.test(pesan)) {
+      return NextResponse.json(
+        {
+          error:
+            "TiDB menolak koneksi karena tidak memakai TLS. Tambahkan " +
+            "?sslaccept=strict pada DATABASE_URL di Vercel, lalu deploy ulang.",
+          code: "DB_NO_TLS",
+        },
+        { status: 503 }
+      );
+    }
     if (
       e?.code === "P1001" || e?.code === "P1017" ||
       /Can't reach database server|ECONNREFUSED|ETIMEDOUT/i.test(pesan)

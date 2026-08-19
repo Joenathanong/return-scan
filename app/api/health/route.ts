@@ -61,9 +61,20 @@ export async function GET() {
     VERCEL_REGION: process.env.VERCEL_REGION ?? null,
   };
 
+  const koneksi = bedahUrl(process.env.DATABASE_URL);
+
   const masalah: string[] = [];
   if (!env.DATABASE_URL.ada) {
     masalah.push("DATABASE_URL belum diisi di Environment Variables Vercel.");
+  } else if (koneksi && !("error" in koneksi) && !koneksi.punyaSsl) {
+    // Diperiksa dari URL-nya langsung, bukan menunggu koneksi gagal —
+    // supaya penyebabnya tetap terlihat walau uji koneksi di bawah
+    // menghasilkan pesan yang berbeda.
+    masalah.push(
+      "DATABASE_URL tidak memuat ?sslaccept=strict. TiDB Cloud menolak semua " +
+        "koneksi tanpa TLS, jadi ini akan selalu gagal. Tambahkan " +
+        "?sslaccept=strict tepat setelah nama database, lalu deploy ulang."
+    );
   }
   if (!env.SESSION_SECRET.ada) {
     masalah.push("SESSION_SECRET belum diisi — login tidak akan pernah berhasil.");
@@ -115,7 +126,13 @@ export async function GET() {
       const pesan = String((e as Error)?.message ?? e);
       database = { terhubung: false, error: pesan.slice(0, 400) };
 
-      if (/Can't reach database server|ECONNREFUSED|ETIMEDOUT|timeout/i.test(pesan)) {
+      if (/insecure transport|1105/i.test(pesan)) {
+        masalah.push(
+          "TiDB menolak koneksi karena tidak memakai TLS. Tambahkan " +
+            "?sslaccept=strict pada DATABASE_URL (tepat setelah nama " +
+            "database, sebelum parameter lain yang dipisah &), lalu deploy ulang."
+        );
+      } else if (/Can't reach database server|ECONNREFUSED|ETIMEDOUT|timeout/i.test(pesan)) {
         masalah.push(
           "Server tidak bisa menghubungi database. Periksa: nama host & port " +
             "di DATABASE_URL, parameter ?sslaccept=strict, dan IP Access List " +
@@ -136,6 +153,16 @@ export async function GET() {
     }
   }
 
+  // Jaring pengaman: jangan sampai `sehat: false` tapi `masalah: []` —
+  // laporan seperti itu memberi tahu ada yang salah tanpa menyebut apa,
+  // yang justru lebih membingungkan daripada tidak ada laporan sama sekali.
+  if (database.terhubung !== true && masalah.length === 0) {
+    masalah.push(
+      "Database tidak bisa dihubungi, dan penyebabnya belum dikenali. " +
+        "Lihat isi `database.error` di bawah untuk pesan aslinya."
+    );
+  }
+
   const sehat = masalah.length === 0 && database.terhubung === true;
 
   return NextResponse.json(
@@ -144,7 +171,7 @@ export async function GET() {
       waktuServer: new Date().toISOString(),
       waktuWIB: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
       env,
-      koneksiDatabase: bedahUrl(process.env.DATABASE_URL),
+      koneksiDatabase: koneksi,
       database,
       masalah,
       totalMs: Date.now() - mulai,
