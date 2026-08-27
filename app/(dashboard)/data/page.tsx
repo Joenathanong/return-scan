@@ -4,10 +4,10 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { todayWIB, shiftDays } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import type { Expedisi, ScanRecord } from "@/types";
+import type { Expedisi, Karung, ScanRecord } from "@/types";
 import {
   Table2, Download, Search, Loader2, AlertCircle, AlertTriangle,
-  RefreshCw, Ban, X, CheckCircle2,
+  RefreshCw, Trash2, X, CheckCircle2, Pencil, Check,
 } from "lucide-react";
 
 /** Jumlah minimum resi per ekspedisi sebelum pola panjang dianggap bermakna. */
@@ -72,6 +72,14 @@ export default function DataPage() {
 
   const [voidUntuk, setVoidUntuk] = useState<ScanRecord | null>(null);
   const [alasan, setAlasan] = useState("");
+
+  // ── Keadaan edit baris ────────────────────────────────────────────────────
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editResi, setEditResi] = useState("");
+  const [editKarung, setEditKarung] = useState("");
+  /** Karung yang tersedia untuk baris yang sedang diedit (satu tanggal). */
+  const [karungPilihan, setKarungPilihan] = useState<Karung[]>([]);
+  const [muatKarung, setMuatKarung] = useState(false);
   const [memproses, setMemproses] = useState(false);
   const [mengekspor, setMengekspor] = useState(false);
 
@@ -133,9 +141,77 @@ export default function DataPage() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Gagal membatalkan.");
       setRows((p) => p.filter((x) => x.id !== voidUntuk.id));
-      setInfo(`Resi ${voidUntuk.noResi} dibatalkan. Kode resinya bebas dipakai lagi.`);
+      setInfo(`Resi ${voidUntuk.noResi} dihapus. Kodenya bebas di-scan lagi.`);
       setVoidUntuk(null);
       setAlasan("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMemproses(false);
+    }
+  };
+
+  /**
+   * Buka mode edit untuk satu baris.
+   *
+   * Daftar karung diambil untuk TANGGAL baris itu — bukan hanya ekspedisinya —
+   * supaya resi yang masuk ke ekspedisi keliru masih bisa dipindahkan ke
+   * karung ekspedisi lain di hari yang sama. Tanggal scan otomatis mengikuti
+   * karung tujuan, jadi tidak mungkin ada isi karung yang tanggalnya berbeda
+   * dari karungnya.
+   */
+  const mulaiEdit = async (r: ScanRecord) => {
+    setEditId(r.id);
+    setEditResi(r.noResi);
+    setEditKarung(r.karungId);
+    setError("");
+    setMuatKarung(true);
+    try {
+      const res = await fetch(`/api/karung?date=${encodeURIComponent(r.date)}`, {
+        cache: "no-store",
+      });
+      const d = await res.json();
+      if (res.ok) setKarungPilihan(d.rows as Karung[]);
+    } catch {
+      // Daftar karung gagal dimuat — kode resi tetap bisa diperbaiki.
+    } finally {
+      setMuatKarung(false);
+    }
+  };
+
+  const batalEdit = () => {
+    setEditId(null);
+    setEditResi("");
+    setEditKarung("");
+    setKarungPilihan([]);
+  };
+
+  const simpanEdit = async (r: ScanRecord) => {
+    const resiBaru = editResi.trim().toUpperCase();
+    if (!resiBaru) { setError("Kode resi tidak boleh kosong."); return; }
+    if (resiBaru === r.noResi && editKarung === r.karungId) { batalEdit(); return; }
+
+    setMemproses(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/scan/${r.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noResi: resiBaru, karungId: editKarung }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Gagal menyimpan perubahan.");
+
+      if (d.scan) {
+        const baru = d.scan as ScanRecord;
+        setRows((p) => p.map((x) => (x.id === r.id ? baru : x)));
+        const pindah = baru.karungId !== r.karungId;
+        setInfo(
+          `Resi ${baru.noResi} diperbarui` +
+          (pindah ? ` dan dipindahkan ke karung #${baru.nomorKarung} (${baru.expedisiName}).` : ".")
+        );
+      }
+      batalEdit();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -304,12 +380,89 @@ export default function DataPage() {
                   <th className="px-3 py-2.5">Di Scan Oleh</th>
                   <th className="px-3 py-2.5 w-24">Tanggal</th>
                   <th className="px-3 py-2.5 w-20">Jam</th>
-                  {isAdmin && <th className="px-3 py-2.5 w-12" />}
+                  {isAdmin && <th className="px-3 py-2.5 w-20 text-center">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {tersaring.slice(0, 1000).map((r, i) => {
                   const aneh = anomali.has(r.id);
+                  const sedangDiedit = editId === r.id;
+
+                  if (sedangDiedit) {
+                    return (
+                      <tr key={r.id} className="bg-green-50">
+                        <td className="px-3 py-2 text-right text-slate-400 tabular-nums">{i + 1}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            value={editResi}
+                            onChange={(e) => setEditResi(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") simpanEdit(r);
+                              if (e.key === "Escape") batalEdit();
+                            }}
+                            className="input-field py-1 font-mono text-sm"
+                            autoFocus
+                            disabled={memproses}
+                          />
+                        </td>
+                        {/* Karung dan ekspedisi jadi satu pilihan: memindahkan
+                            resi ke karung lain otomatis memindahkan ekspedisi
+                            dan tanggalnya juga. */}
+                        <td className="px-3 py-2" colSpan={2}>
+                          <select
+                            value={editKarung}
+                            onChange={(e) => setEditKarung(e.target.value)}
+                            className="input-field py-1 text-sm"
+                            disabled={memproses || muatKarung}
+                          >
+                            {muatKarung && <option>Memuat karung...</option>}
+                            {!muatKarung && karungPilihan.length === 0 && (
+                              <option value={r.karungId}>
+                                #{r.nomorKarung} — {r.expedisiName}
+                              </option>
+                            )}
+                            {karungPilihan.map((k) => (
+                              <option key={k.id} value={k.id}>
+                                #{k.nomorKarung} — {k.expedisiName}
+                                {k.status === "locked" ? " (terkunci)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 text-slate-400 truncate max-w-[140px]">{r.scannedByName}</td>
+                        <td className="px-3 py-2 text-slate-400 tabular-nums">{r.date}</td>
+                        <td className="px-3 py-2 text-slate-400 tabular-nums">
+                          {new Date(r.scannedAt).toLocaleTimeString("id-ID", {
+                            timeZone: "Asia/Jakarta",
+                            hour: "2-digit", minute: "2-digit", second: "2-digit",
+                          })}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => simpanEdit(r)}
+                              disabled={memproses}
+                              className="p-1 rounded text-green-700 hover:bg-green-100 disabled:opacity-40"
+                              title="Simpan (Enter)"
+                            >
+                              {memproses
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <Check className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={batalEdit}
+                              disabled={memproses}
+                              className="p-1 rounded text-slate-400 hover:bg-slate-200"
+                              title="Batal (Esc)"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   return (
                     <tr key={r.id} className={cn("hover:bg-slate-50", aneh && "bg-amber-50/60")}>
                       <td className="px-3 py-2 text-right text-slate-400 tabular-nums">{i + 1}</td>
@@ -338,13 +491,26 @@ export default function DataPage() {
                       </td>
                       {isAdmin && (
                         <td className="px-3 py-2">
-                          <button
-                            onClick={() => { setVoidUntuk(r); setAlasan(""); }}
-                            className="text-slate-300 hover:text-red-600 transition-colors"
-                            title="Batalkan resi ini"
-                          >
-                            <Ban className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => mulaiEdit(r)}
+                              disabled={editId !== null}
+                              className="p-1 rounded text-slate-300 hover:text-green-700 hover:bg-green-50
+                                         disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
+                              title="Ubah kode resi atau pindah karung"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => { setVoidUntuk(r); setAlasan(""); }}
+                              disabled={editId !== null}
+                              className="p-1 rounded text-slate-300 hover:text-red-600 hover:bg-red-50
+                                         disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
+                              title="Hapus resi ini"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -368,23 +534,32 @@ export default function DataPage() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4">
             <div>
-              <h3 className="font-semibold text-slate-900">Batalkan Resi</h3>
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-600" /> Hapus Resi?</h3>
               <p className="font-mono text-sm text-slate-600 mt-1">{voidUntuk.noResi}</p>
               <p className="text-xs text-slate-500 mt-1">
                 {voidUntuk.expedisiName} · Karung #{voidUntuk.nomorKarung} · {voidUntuk.date}
               </p>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
-              <p className="text-xs text-blue-700">
-                Barisnya tidak dihapus — hanya ditandai dibatalkan, dan jejaknya
-                tetap tersimpan untuk audit. Kode resi ini akan bebas di-scan lagi.
+            <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              <p className="text-xs text-red-700">
+                Resi ini akan <strong>hilang dari tabel, laporan, ekspor Excel,
+                tanda terima, dan hitungan dashboard</strong>, dan kodenya bebas
+                di-scan ulang.
+              </p>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <p className="text-xs text-slate-600">
+                Di dalam database barisnya tetap disimpan dan ditandai dibatalkan,
+                supaya jejak siapa men-scan apa tidak putus — penting kalau resi
+                ini sudah tercetak di tanda terima yang ditandatangani.
               </p>
             </div>
 
             <div>
               <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-                Alasan pembatalan
+                Alasan penghapusan <span className="text-red-600">*</span>
               </label>
               <input
                 value={alasan}
@@ -401,9 +576,12 @@ export default function DataPage() {
                 disabled={memproses || !alasan.trim()}
                 className="btn-danger flex-1 justify-center"
               >
-                {memproses && <Loader2 className="w-4 h-4 animate-spin" />} Batalkan
+                {memproses
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Trash2 className="w-4 h-4" />}
+                Ya, Hapus
               </button>
-              <button onClick={() => setVoidUntuk(null)} className="btn-ghost">Tutup</button>
+              <button onClick={() => setVoidUntuk(null)} className="btn-ghost">Batal</button>
             </div>
           </div>
         </div>
