@@ -4,10 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
+import { mintaJson, pesanError } from "@/lib/http";
 import type { AppUser } from "@/types";
 import {
   Users, Plus, Loader2, AlertCircle, CheckCircle2, KeyRound,
-  ShieldCheck, User as UserIcon, X,
+  ShieldCheck, User as UserIcon, X, MonitorSmartphone, PackageOpen, LogOut,
 } from "lucide-react";
 
 export default function AdminUsersPage() {
@@ -16,6 +17,19 @@ export default function AdminUsersPage() {
       <Isi />
     </AuthGuard>
   );
+}
+
+/** "2026-09-07T03:12:00Z" → "7 Sep, 10.12" (WIB). */
+function jamSingkat(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Intl.DateTimeFormat("id-ID", {
+      timeZone: "Asia/Jakarta",
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
 }
 
 function Isi() {
@@ -30,20 +44,20 @@ function Isi() {
   const [fNama, setFNama] = useState("");
   const [fRole, setFRole] = useState<"admin" | "operator">("operator");
   const [fPassword, setFPassword] = useState("");
+  const [fBongkaran, setFBongkaran] = useState(false);
   const [menyimpan, setMenyimpan] = useState(false);
 
   const [resetUntuk, setResetUntuk] = useState<AppUser | null>(null);
   const [passwordBaru, setPasswordBaru] = useState("");
+  const [keluarkanUntuk, setKeluarkanUntuk] = useState<AppUser | null>(null);
 
   const muat = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/users", { cache: "no-store" });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Gagal memuat user.");
-      setRows(d.rows as AppUser[]);
+      const d = await mintaJson<{ rows: AppUser[] }>("/api/users");
+      setRows(d.rows);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(pesanError(e, "Gagal memuat user."));
     } finally {
       setLoading(false);
     }
@@ -55,19 +69,22 @@ function Isi() {
     setMenyimpan(true);
     setError("");
     try {
-      const r = await fetch("/api/users", {
+      await mintaJson("/api/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: fEmail, name: fNama, role: fRole, password: fPassword }),
+        body: {
+          email: fEmail, name: fNama, role: fRole,
+          password: fPassword, bisaBongkaran: fBongkaran,
+        },
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Gagal membuat user.");
-      setInfo(`Akun ${fEmail} dibuat. Beritahukan passwordnya — user wajib menggantinya saat login pertama.`);
+      setInfo(
+        `Akun ${fEmail} dibuat. Beritahukan passwordnya — user wajib menggantinya saat login pertama.`
+      );
       setFormBuka(false);
-      setFEmail(""); setFNama(""); setFPassword(""); setFRole("operator");
+      setFEmail(""); setFNama(""); setFPassword("");
+      setFRole("operator"); setFBongkaran(false);
       muat();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(pesanError(e, "Gagal membuat user."));
     } finally {
       setMenyimpan(false);
     }
@@ -76,16 +93,10 @@ function Isi() {
   const ubah = async (u: AppUser, data: Partial<AppUser>) => {
     setError("");
     try {
-      const r = await fetch(`/api/users/${u.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Gagal mengubah user.");
+      await mintaJson(`/api/users/${u.id}`, { method: "PATCH", body: data });
       muat();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(pesanError(e, "Gagal mengubah user."));
     }
   };
 
@@ -94,19 +105,49 @@ function Isi() {
     setMenyimpan(true);
     setError("");
     try {
-      const r = await fetch(`/api/users/${resetUntuk.id}/password`, {
+      await mintaJson(`/api/users/${resetUntuk.id}/password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: passwordBaru }),
+        body: { password: passwordBaru },
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Gagal menyimpan password.");
-      setInfo(`Password ${resetUntuk.email} berhasil diatur. User wajib menggantinya saat login.`);
+      setInfo(
+        `Password ${resetUntuk.email} berhasil diatur. User wajib menggantinya saat login, ` +
+          "dan ikatan ke perangkat lamanya sudah dilepas."
+      );
       setResetUntuk(null);
       setPasswordBaru("");
       muat();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(pesanError(e, "Gagal menyimpan password."));
+    } finally {
+      setMenyimpan(false);
+    }
+  };
+
+  const keluarkan = async () => {
+    if (!keluarkanUntuk) return;
+    setMenyimpan(true);
+    setError("");
+    try {
+      const d = await mintaJson<{ diriSendiri?: boolean; sudahKosong?: boolean }>(
+        `/api/users/${keluarkanUntuk.id}/keluarkan`,
+        { method: "POST" }
+      );
+      // Admin mengeluarkan dirinya sendiri: sesi yang sedang dipakai halaman
+      // ini baru saja dihapus. Ke /login sekarang, jangan menunggu klik
+      // berikutnya gagal dengan pesan yang membingungkan.
+      if (d.diriSendiri) {
+        window.location.href = "/login?alasan=sesi";
+        return;
+      }
+      setInfo(
+        d.sudahKosong
+          ? `${keluarkanUntuk.email} memang sedang tidak terikat ke perangkat mana pun.`
+          : `${keluarkanUntuk.email} dikeluarkan. Perangkat lamanya akan kembali ke halaman login.`
+      );
+      setKeluarkanUntuk(null);
+      muat();
+    } catch (e) {
+      setError(pesanError(e, "Gagal mengeluarkan dari perangkat."));
     } finally {
       setMenyimpan(false);
     }
@@ -124,6 +165,16 @@ function Isi() {
         <button onClick={() => setFormBuka((v) => !v)} className="btn-primary">
           <Plus className="w-4 h-4" /> Tambah User
         </button>
+      </div>
+
+      <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex gap-2.5">
+        <MonitorSmartphone className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-slate-600">
+          Satu akun hanya bisa aktif di <strong>satu perangkat</strong>. Login baru
+          selalu menggusur yang lama, jadi tidak ada akun yang bisa terkunci —
+          termasuk akun admin. Pakai <em>Keluarkan</em> kalau perangkatnya hilang
+          atau ditinggal dalam keadaan masih login.
+        </p>
       </div>
 
       {error && <Kotak jenis="error" pesan={error} onTutup={() => setError("")} />}
@@ -163,6 +214,23 @@ function Isi() {
               />
             </div>
           </div>
+
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={fRole === "admin" || fBongkaran}
+              disabled={fRole === "admin"}
+              onChange={(e) => setFBongkaran(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-green-600 disabled:opacity-50"
+            />
+            <span className="text-sm text-slate-700">
+              Bisa mengakses menu <strong>Bongkaran</strong>
+              {fRole === "admin" && (
+                <span className="text-slate-400"> — admin selalu bisa</span>
+              )}
+            </span>
+          </label>
+
           <p className="text-xs text-slate-400">
             User akan diminta mengganti password ini saat login pertama.
           </p>
@@ -188,15 +256,16 @@ function Isi() {
           <div className="divide-y divide-slate-100">
             {rows.map((u) => {
               const sendiri = u.id === appUser?.id;
+              const admin = u.role === "admin";
               return (
                 <div key={u.id} className="p-4 flex flex-wrap items-center gap-3">
                   <div
                     className={cn(
                       "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                      u.role === "admin" ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-500"
+                      admin ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-500"
                     )}
                   >
-                    {u.role === "admin" ? <ShieldCheck className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
+                    {admin ? <ShieldCheck className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
                   </div>
 
                   <div className="flex-1 min-w-[180px]">
@@ -206,19 +275,56 @@ function Isi() {
                     </p>
                     <p className="text-xs text-slate-500 truncate">{u.email}</p>
                     <div className="flex flex-wrap gap-1.5 mt-1">
-                      <span className={u.role === "admin" ? "badge-warning" : "badge-gray"}>
-                        {u.role === "admin" ? "Admin" : "Operator"}
+                      <span className={admin ? "badge-warning" : "badge-gray"}>
+                        {admin ? "Admin" : "Operator"}
                       </span>
                       <span className={u.active ? "badge-success" : "badge-danger"}>
                         {u.active ? "Aktif" : "Nonaktif"}
                       </span>
+                      {(admin || u.bisaBongkaran) && (
+                        <span className="badge-info inline-flex items-center gap-1">
+                          <PackageOpen className="w-3 h-3" /> Bongkaran
+                        </span>
+                      )}
                       {u.mustChangePassword && (
                         <span className="badge-info">Password sementara</span>
                       )}
                     </div>
+
+                    {/* Keadaan perangkat — inti dari aturan satu perangkat */}
+                    <p className="text-xs mt-1.5 flex items-center gap-1.5">
+                      <MonitorSmartphone
+                        className={cn(
+                          "w-3.5 h-3.5 flex-shrink-0",
+                          u.sedangLogin ? "text-green-600" : "text-slate-300"
+                        )}
+                      />
+                      {u.sedangLogin ? (
+                        <span className="text-slate-600">
+                          Login di <strong>{u.perangkatLabel ?? "perangkat tidak dikenal"}</strong>
+                          {u.sesiSejak && (
+                            <span className="text-slate-400"> · sejak {jamSingkat(u.sesiSejak)}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Tidak sedang login</span>
+                      )}
+                    </p>
                   </div>
 
                   <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setKeluarkanUntuk(u)}
+                      disabled={!u.sedangLogin}
+                      className="btn-ghost text-xs disabled:opacity-30"
+                      title={
+                        u.sedangLogin
+                          ? "Lepaskan ikatan akun ini dari perangkatnya"
+                          : "Akun ini sedang tidak terikat ke perangkat mana pun"
+                      }
+                    >
+                      <LogOut className="w-3.5 h-3.5" /> Keluarkan
+                    </button>
                     <button
                       onClick={() => { setResetUntuk(u); setPasswordBaru(""); }}
                       className="btn-ghost text-xs"
@@ -227,12 +333,26 @@ function Isi() {
                       <KeyRound className="w-3.5 h-3.5" /> Password
                     </button>
                     <button
-                      onClick={() => ubah(u, { role: u.role === "admin" ? "operator" : "admin" })}
+                      onClick={() => ubah(u, { bisaBongkaran: !u.bisaBongkaran })}
+                      disabled={admin}
+                      className="btn-ghost text-xs disabled:opacity-30"
+                      title={
+                        admin
+                          ? "Admin selalu punya akses Bongkaran"
+                          : u.bisaBongkaran
+                            ? "Cabut akses menu Bongkaran"
+                            : "Beri akses menu Bongkaran"
+                      }
+                    >
+                      {u.bisaBongkaran ? "Cabut Bongkaran" : "Beri Bongkaran"}
+                    </button>
+                    <button
+                      onClick={() => ubah(u, { role: admin ? "operator" : "admin" })}
                       disabled={sendiri}
                       className="btn-ghost text-xs disabled:opacity-40"
                       title={sendiri ? "Tidak bisa mengubah role sendiri" : "Ubah role"}
                     >
-                      {u.role === "admin" ? "Jadikan Operator" : "Jadikan Admin"}
+                      {admin ? "Jadikan Operator" : "Jadikan Admin"}
                     </button>
                     <button
                       onClick={() => ubah(u, { active: !u.active })}
@@ -275,7 +395,8 @@ function Isi() {
               autoFocus
             />
             <p className="text-xs text-slate-400">
-              Catat dan sampaikan ke user. Ia wajib menggantinya saat login berikutnya.
+              Catat dan sampaikan ke user. Ia wajib menggantinya saat login berikutnya,
+              dan ikatan ke perangkat lamanya ikut dilepas.
             </p>
             <div className="flex gap-2">
               <button
@@ -286,6 +407,51 @@ function Isi() {
                 {menyimpan && <Loader2 className="w-4 h-4 animate-spin" />} Simpan
               </button>
               <button onClick={() => setResetUntuk(null)} className="btn-ghost">Batal</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog keluarkan dari perangkat */}
+      {keluarkanUntuk && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-slate-900">Keluarkan dari perangkat?</h3>
+                <p className="text-sm text-slate-500 mt-0.5">{keluarkanUntuk.email}</p>
+              </div>
+              <button onClick={() => setKeluarkanUntuk(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3 text-sm text-amber-800">
+              <p>
+                <strong>{keluarkanUntuk.perangkatLabel ?? "Perangkat"}</strong> akan
+                kembali ke halaman login pada permintaan berikutnya.
+              </p>
+              {keluarkanUntuk.id === appUser?.id && (
+                <p className="mt-1.5 font-medium">
+                  Ini akun Anda sendiri — Anda akan ikut keluar sekarang juga.
+                </p>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Data yang sedang diketik di perangkat itu dan belum disimpan akan hilang.
+              Password user tidak berubah; ia bisa langsung login lagi.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={keluarkan}
+                disabled={menyimpan}
+                className="btn-primary flex-1 justify-center bg-red-600 hover:bg-red-700"
+              >
+                {menyimpan && <Loader2 className="w-4 h-4 animate-spin" />} Keluarkan
+              </button>
+              <button onClick={() => setKeluarkanUntuk(null)} className="btn-ghost">Batal</button>
             </div>
           </div>
         </div>

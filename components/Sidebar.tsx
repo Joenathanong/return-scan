@@ -6,7 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, ScanLine, History, Printer, Table2,
-  Package, Users, Truck, Settings, LogOut, X, KeyRound,
+  Package, Users, Truck, Settings, LogOut, X, KeyRound, Boxes,
+  PackageOpen, FileSpreadsheet, LayoutList,
 } from "lucide-react";
 
 interface NavItem {
@@ -19,6 +20,12 @@ interface NavGroup {
   /** null = tanpa judul (dipakai untuk Dashboard yang berdiri sendiri) */
   judul: string | null;
   adminOnly?: boolean;
+  /**
+   * Grup yang butuh izin modul Bongkaran. Admin selalu lolos.
+   * Ini murni soal tampilan — API tetap memeriksa sendiri lewat
+   * requireBongkaran(), jadi menyembunyikan menu bukan pengamanannya.
+   */
+  bongkaranOnly?: boolean;
   items: NavItem[];
 }
 
@@ -42,6 +49,15 @@ const GRUP: NavGroup[] = [
     ],
   },
   {
+    judul: "Bongkaran",
+    bongkaranOnly: true,
+    items: [
+      { href: "/bongkaran",           label: "Scan Bongkaran", icon: <PackageOpen     className="w-[18px] h-[18px]" /> },
+      { href: "/bongkaran/dashboard", label: "Monitoring",     icon: <LayoutList      className="w-[18px] h-[18px]" /> },
+      { href: "/bongkaran/export",    label: "Export",         icon: <FileSpreadsheet className="w-[18px] h-[18px]" /> },
+    ],
+  },
+  {
     judul: "Laporan",
     items: [
       { href: "/history", label: "History",        icon: <History className="w-[18px] h-[18px]" /> },
@@ -53,6 +69,7 @@ const GRUP: NavGroup[] = [
     adminOnly: true,
     items: [
       { href: "/claim",          label: "Kelola Claim",    icon: <Package  className="w-[18px] h-[18px]" /> },
+      { href: "/admin/produk",   label: "Master Produk",   icon: <Boxes    className="w-[18px] h-[18px]" /> },
       { href: "/admin/users",    label: "Kelola User",     icon: <Users    className="w-[18px] h-[18px]" /> },
       { href: "/admin/expedisi", label: "Master Expedisi", icon: <Truck    className="w-[18px] h-[18px]" /> },
       { href: "/admin/settings", label: "Pengaturan",      icon: <Settings className="w-[18px] h-[18px]" /> },
@@ -76,9 +93,16 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { appUser, signOut } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  const bisaBongkaran = isAdmin || appUser?.bisaBongkaran === true;
 
+  /**
+   * `startsWith` membuat menu induk ikut menyala di halaman anaknya —
+   * "Scan Bongkaran" akan tersorot padahal yang dibuka /bongkaran/export.
+   * Menu yang punya anak dicocokkan persis.
+   */
+  const PUNYA_ANAK = ["/dashboard", "/bongkaran"];
   const isActive = (href: string) =>
-    pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+    PUNYA_ANAK.includes(href) ? pathname === href : pathname.startsWith(href);
 
   return (
     <>
@@ -113,7 +137,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* ── Menu ── */}
         <nav className="flex-1 overflow-y-auto scroll-slim-dark px-3 py-3">
-          {GRUP.filter((g) => !g.adminOnly || isAdmin).map((grup, gi) => (
+          {GRUP.filter(
+            (g) => (!g.adminOnly || isAdmin) && (!g.bongkaranOnly || bisaBongkaran)
+          ).map((grup, gi) => (
             <div key={grup.judul ?? `grup-${gi}`} className={gi > 0 ? "mt-5" : ""}>
               {grup.judul && (
                 <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">

@@ -59,7 +59,24 @@ export interface SessionPayload {
   email: string;
   name: string;
   role: "admin" | "operator";
+  /**
+   * Id sesi — dibuat baru setiap kali login berhasil dan disalin ke kolom
+   * `users.sesi_aktif`. requireUser() membandingkan keduanya di setiap
+   * request; kalau berbeda, berarti akun ini sudah login di perangkat lain
+   * dan perangkat ini harus diputus.
+   *
+   * OPSIONAL di tipe (bukan di praktik) semata-mata supaya cookie yang
+   * terlanjur terbit SEBELUM fitur ini dipasang tidak langsung dianggap
+   * palsu. Cookie lama tanpa `sid` diperlakukan sebagai sesi kedaluwarsa —
+   * pemiliknya diminta login sekali lagi, bukan melihat pesan error.
+   */
+  sid?: string;
   exp: number; // epoch detik
+}
+
+/** Id sesi acak, 32 karakter hex. Muat di VarChar(64). */
+export function buatSid(): string {
+  return randomBytes(16).toString("hex");
 }
 
 const b64u = {

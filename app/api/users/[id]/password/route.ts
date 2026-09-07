@@ -34,9 +34,20 @@ export async function POST(
     });
     if (!target) throw notFound("User tidak ditemukan.");
 
+    // Reset password juga MELEPAS ikatan perangkat. Alasannya: password
+    // direset justru ketika user tidak bisa masuk — sering karena PDT-nya
+    // hilang atau rusak dalam keadaan masih login. Kalau ikatannya tidak
+    // dilepas, user tetap bisa login (login terbaru menang), tapi kolom
+    // "Sedang login di" akan terus menunjuk perangkat yang sudah tiada.
     await prisma.user.update({
       where: { id },
-      data: { passwordHash: hashPassword(password), mustChangePassword: true },
+      data: {
+        passwordHash: hashPassword(password),
+        mustChangePassword: true,
+        sesiAktif: null,
+        perangkatLabel: null,
+        sesiSejak: null,
+      },
     });
     await writeAudit(
       me.id, me.name, "RESET_PASSWORD",

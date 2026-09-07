@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/api";
+import { getSession, SESSION_COOKIE } from "@/lib/api";
 import type { SessionUser, UserRole } from "@/types";
 
 export const runtime = "nodejs";
@@ -25,17 +25,34 @@ export async function GET() {
     select: {
       id: true, email: true, name: true, role: true,
       active: true, mustChangePassword: true,
+      sesiAktif: true, bisaBongkaran: true,
     },
   });
 
   if (!user || !user.active) return NextResponse.json({ user: null });
 
+  // Sesi sudah diambil alih perangkat lain (atau dilepas admin). Dibalas
+  // 200 dengan `user: null` + alasan — BUKAN 401 — supaya konsisten dengan
+  // perilaku endpoint ini yang lain, dan supaya halaman login bisa
+  // menjelaskan kenapa orangnya tiba-tiba ada di sana.
+  if (!s.sid || user.sesiAktif !== s.sid) {
+    const res = NextResponse.json({ user: null, alasan: "SESI_DIGANTI" });
+    // Cookie ikut dibuang — kalau dibiarkan, middleware akan terus
+    // menganggap orangnya sudah login dan memantulkannya dari /login ke
+    // /dashboard tanpa henti. Endpoint ini membalas 200 sehingga tidak
+    // lewat penanganan di handle(), jadi harus diurus sendiri di sini.
+    res.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+    return res;
+  }
+
+  const isAdmin = user.role === "admin";
   const out: SessionUser = {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: (user.role === "admin" ? "admin" : "operator") as UserRole,
+    role: (isAdmin ? "admin" : "operator") as UserRole,
     mustChangePassword: user.mustChangePassword,
+    bisaBongkaran: isAdmin || user.bisaBongkaran,
   };
   return NextResponse.json({ user: out });
 }

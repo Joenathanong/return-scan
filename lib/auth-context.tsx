@@ -40,7 +40,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const data = await mintaJson<{ user: SessionUser | null }>("/api/auth/me");
+      const data = await mintaJson<{
+        user: SessionUser | null;
+        alasan?: string;
+      }>("/api/auth/me");
+
+      // Sesi diambil alih perangkat lain. /api/auth/me sengaja membalas 200
+      // (bukan 401), jadi kasus ini tidak lewat penanganan di lib/http.ts
+      // dan harus ditangkap di sini.
+      if (!data.user && data.alasan === "SESI_DIGANTI") {
+        setAppUser(null);
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login?alasan=sesi";
+        }
+        return;
+      }
+
       setAppUser(data.user ?? null);
       setGangguan("");
     } catch (e) {

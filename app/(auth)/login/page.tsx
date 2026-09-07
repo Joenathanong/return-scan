@@ -3,13 +3,20 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { ScanLine, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { ScanLine, Loader2, AlertCircle, Eye, EyeOff, MonitorSmartphone } from "lucide-react";
 
 function LoginInner() {
   const { signIn, appUser, loading, gangguan } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/dashboard";
+
+  /**
+   * Datang ke sini karena sesinya diambil alih perangkat lain — bukan karena
+   * membuka /login sendiri. Tanpa penjelasan ini, operator yang tiba-tiba
+   * terlempar dari tengah pekerjaan akan mengira aplikasinya rusak.
+   */
+  const karenaSesiDiganti = params.get("alasan") === "sesi";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,6 +59,20 @@ function LoginInner() {
           <h1 className="text-2xl font-bold text-slate-900">Scan Retur</h1>
           <p className="text-slate-500 text-sm mt-1">PT. IEG</p>
         </div>
+
+        {karenaSesiDiganti && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex gap-2.5">
+            <MonitorSmartphone className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <p className="font-medium">Sesi di perangkat ini diakhiri.</p>
+              <p className="text-amber-700 mt-0.5">
+                Akun Anda dipakai login di perangkat lain. Satu akun hanya bisa
+                aktif di satu perangkat. Silakan masuk lagi kalau perangkat ini
+                yang mau dipakai.
+              </p>
+            </div>
+          </div>
+        )}
 
         <form
           onSubmit={submit}

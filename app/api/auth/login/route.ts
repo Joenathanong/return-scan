@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { verifyPassword, signSession } from "@/lib/crypto";
+import { verifyPassword, signSession, buatSid } from "@/lib/crypto";
+import { labelPerangkat } from "@/lib/perangkat";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE,
@@ -104,16 +105,43 @@ export async function POST(req: NextRequest) {
     }
 
     const role: UserRole = user.role === "admin" ? "admin" : "operator";
+
+    // ── Login satu perangkat ────────────────────────────────────────────
+    // `sid` baru dibuat SETIAP login dan menimpa `sesi_aktif`. Perangkat
+    // yang tadinya login memegang sid lama; permintaan berikutnya darinya
+    // akan ditolak requireUser() dengan kode SESI_DIGANTI.
+    //
+    // Arahnya sengaja "login terbaru menang", bukan "login pertama
+    // bertahan". Kalau yang lama bertahan, PDT yang mati tanpa logout akan
+    // mengunci akun itu sampai 12 jam ke depan dan operator tidak bisa
+    // bekerja — sedangkan dengan arah ini, ia cukup login lagi.
+    const sid = buatSid();
+    const perangkat = labelPerangkat(req.headers.get("user-agent"));
+
     const token = signSession(
-      { uid: user.id, email: user.email, name: user.name, role },
+      { uid: user.id, email: user.email, name: user.name, role, sid },
       SESSION_MAX_AGE
     );
 
+    const sesiSebelumnya = user.sesiAktif;
+
     await prisma.user.update({
       where: { id: user.id },
-      data: { lastLogin: new Date() },
+      data: {
+        lastLogin: new Date(),
+        sesiAktif: sid,
+        perangkatLabel: perangkat,
+        sesiSejak: new Date(),
+      },
     });
-    await writeAudit(user.id, user.name, "LOGIN", "Login berhasil");
+    await writeAudit(
+      user.id,
+      user.name,
+      "LOGIN",
+      sesiSebelumnya
+        ? `Login berhasil (${perangkat}) — sesi di perangkat sebelumnya diakhiri`
+        : `Login berhasil (${perangkat})`
+    );
 
     const sessionUser: SessionUser = {
       id: user.id,
@@ -121,6 +149,7 @@ export async function POST(req: NextRequest) {
       name: user.name,
       role,
       mustChangePassword: user.mustChangePassword,
+      bisaBongkaran: user.role === "admin" || user.bisaBongkaran,
     };
 
     const res = NextResponse.json({ user: sessionUser });

@@ -33,12 +33,35 @@ model User {
   // Dipaksa ganti password saat login pertama (dipakai untuk user hasil seed).
   mustChangePassword Boolean @default(true) @map("must_change_password")
 
+  // ── Login satu perangkat ────────────────────────────────────────────────
+  // `sesiAktif` adalah id acak yang dibuat setiap kali login berhasil, dan
+  // ikut ditanam di dalam cookie sesi. requireUser() membandingkan keduanya
+  // pada SETIAP request — gratis, karena baris user ini memang sudah dibaca
+  // untuk mengecek `active`. Kalau tidak cocok, artinya akun ini sudah login
+  // di perangkat lain, dan perangkat lama langsung diputus.
+  //
+  // Sifatnya "login terbaru menang", jadi tidak ada skenario admin terkunci
+  // dari sistemnya sendiri: cukup login lagi.
+  //
+  // NULL = tidak ada sesi aktif (belum pernah login, sudah logout, atau
+  // dikeluarkan admin lewat tombol "Keluarkan dari perangkat").
+  sesiAktif      String?   @map("sesi_aktif") @db.VarChar(64)
+  perangkatLabel String?   @map("perangkat_label") @db.VarChar(191)
+  sesiSejak      DateTime? @map("sesi_sejak")
+
+  // Izin modul. Sengaja BUKAN role baru: begitu ada modul ketiga, matriks
+  // role akan meledak. Satu boolean per modul jauh lebih mudah dibaca dan
+  // tidak mengubah arti role yang sudah dipakai di seluruh aplikasi.
+  // Admin selalu boleh, tanpa melihat kolom ini.
+  bisaBongkaran Boolean @default(false) @map("bisa_bongkaran")
+
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by") @db.VarChar(30)
   lastLogin DateTime? @map("last_login")
 
-  karungDibuat Karung[] @relation("KarungCreatedBy")
-  scans        Scan[]   @relation("ScanBy")
+  karungDibuat Karung[]     @relation("KarungCreatedBy")
+  scans        Scan[]       @relation("ScanBy")
+  bongkaran    Bongkaran[]  @relation("BongkaranBy")
 
   @@index([active])
   @@map("users")
@@ -248,4 +271,211 @@ model AuditLog {
   @@index([timestamp])
   @@index([userId])
   @@map("audit_log")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODUL BONGKARAN RETUR
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── MASTER PRODUK ───────────────────────────────────────────────────────────
+
+/**
+ * Produk, dikunci oleh kode SKU.
+ *
+ * `updatedAt` diindeks karena inilah tumpuan sinkron cache PDT: klien
+ * mengirim penanda waktu sinkron terakhir, server hanya membalas baris yang
+ * berubah sesudahnya. Hari pertama seluruh master terkirim sekali; hari-hari
+ * berikutnya biasanya nol baris.
+ *
+ * Produk yang tidak dipakai lagi ditandai `active = false`, TIDAK dihapus —
+ * baris yang terhapus tidak akan pernah muncul di sinkron delta, sehingga
+ * cache PDT akan menyimpannya selamanya.
+ */
+model Produk {
+  sku  String @id @db.VarChar(64)
+  nama String @db.VarChar(191)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by") @db.VarChar(30)
+
+  barcodes ProdukBarcode[]
+
+  @@index([updatedAt])
+  @@index([active])
+  @@map("produk")
+}
+
+/**
+ * Barcode → SKU, tabel terpisah karena satu SKU sering punya lebih dari satu
+ * barcode: karton vs pcs, kemasan lama vs kemasan baru, barcode pabrik vs
+ * barcode internal. Kalau digabung jadi satu kolom di Produk, penambahan
+ * barcode kedua berarti membongkar tabel dan seluruh cache PDT.
+ */
+model ProdukBarcode {
+  barcode String @id @db.VarChar(64)
+
+  sku    String @db.VarChar(64)
+  produk Produk @relation(fields: [sku], references: [sku])
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sku])
+  @@index([updatedAt])
+  @@map("produk_barcode")
+}
+
+/**
+ * Batch yang pernah dipakai per SKU — sumber auto-suggest.
+ *
+ * Isinya TIDAK datang dari impor master, melainkan tumbuh sendiri dari hasil
+ * scan (itu yang dipilih user). Konsekuensinya daftar saran memang kosong di
+ * hari pertama dan makin kaya seiring pemakaian.
+ *
+ * Batch dari item berkondisi ISI_SALAH tidak masuk ke sini: item itu tidak
+ * punya SKU, dan batch tanpa SKU tidak bisa dipakai menyarankan apa pun.
+ */
+model BatchSku {
+  id String @id @default(cuid())
+
+  sku    String @db.VarChar(64)
+  batch  String @db.VarChar(32)
+  edDate String @map("ed_date") @db.VarChar(10) // "YYYY-MM-DD"
+
+  /** Berapa kali batch ini pernah di-scan — dipakai mengurutkan saran. */
+  dipakai Int @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([sku, batch], map: "uq_batch_sku")
+  @@index([updatedAt])
+  @@map("batch_sku")
+}
+
+// ─── BONGKARAN ───────────────────────────────────────────────────────────────
+
+/**
+ * Satu baris per RESI yang dibongkar.
+ *
+ * `scannedAt` ditulis SERVER pada saat resi di-scan (POST /api/bongkaran/mulai),
+ * bukan pada saat Simpan. Jam PDT yang meleset tidak bisa merusak data.
+ *
+ * status:
+ *   draft  → resi sudah di-scan, barang belum disimpan (PDT masih mengisi)
+ *   final  → sudah disimpan lengkap
+ *   voided → dibatalkan, datanya tetap ada untuk audit
+ *
+ * TIDAK ada UNIQUE pada noResi: satu resi bisa sah dibongkar lebih dari sekali
+ * (dua koli, satu nomor resi). Duplikat DIPERINGATKAN di layar, bukan ditolak.
+ */
+model Bongkaran {
+  id String @id @default(cuid())
+
+  noResi String @map("no_resi") @db.VarChar(64)
+
+  scannedAt DateTime @map("scanned_at")
+
+  /**
+   * true bila stempel server gagal diambil (PDT offline saat scan resi) dan
+   * klien terpaksa memakai jam lokalnya. Ditandai supaya baris seperti ini
+   * bisa ditelusuri di dashboard, bukan diam-diam dianggap sama sahihnya.
+   */
+  waktuDariKlien Boolean @default(false) @map("waktu_dari_klien")
+
+  /**
+   * Kunci idempoten dari klien, HANYA untuk jalur luring.
+   *
+   * Jalur normal sudah aman dengan sendirinya: kirim ulang akan menemukan
+   * draft yang statusnya bukan lagi `draft` dan ditolak. Jalur luring tidak
+   * punya draft — kalau balasan hilang di jaringan setelah server menulis,
+   * operator menekan Simpan lagi dan resi yang sama masuk dua kali, terlihat
+   * persis seperti koli kedua yang sah. Kolom ini yang mencegahnya.
+   *
+   * NULL untuk semua baris jalur normal, dan MySQL mengizinkan banyak NULL
+   * di kolom UNIQUE — pola yang sama dengan `no_resi_unik` di tabel scans.
+   */
+  klienKunci String? @unique(map: "uq_bongkaran_klien") @map("klien_kunci") @db.VarChar(64)
+
+  scannedById String @map("scanned_by") @db.VarChar(30)
+  scannedBy   User   @relation("BongkaranBy", fields: [scannedById], references: [id])
+
+  /** Tanggal bisnis WIB "YYYY-MM-DD", dihitung di server. */
+  date String @db.VarChar(10)
+
+  status      String    @default("draft") @db.VarChar(16)
+  finalizedAt DateTime? @map("finalized_at")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by") @db.VarChar(30)
+  voidReason String?   @map("void_reason") @db.VarChar(255)
+
+  items BongkaranItem[]
+
+  @@index([date])
+  @@index([noResi])
+  @@index([status])
+  @@index([scannedById])
+  @@map("bongkaran")
+}
+
+/**
+ * Satu baris per BARANG di dalam resi.
+ *
+ * `sku` dan `namaProduk` adalah SNAPSHOT, bukan relasi. Kalau nama produk di
+ * master diralat bulan depan, hasil scan hari ini harus tetap menampilkan
+ * nama yang dibaca petugas saat itu.
+ *
+ * KOLOM YANG BOLEH NULL, DAN KAPAN:
+ *   barcode / sku / namaProduk → NULL HANYA bila kondisi = ISI_SALAH.
+ *   namaDiterima               → WAJIB bila kondisi = ISI_SALAH, selain itu NULL.
+ *   batch / edDate             → opsional HANYA bila kondisi = ISI_SALAH.
+ * Aturan ini ditegakkan di lapisan API (lib/bongkaran.ts), bukan sekadar
+ * diharapkan: item BAGUS/RUSAK_KEMASAN/RUSAK_TOTAL tanpa barcode ditolak 400.
+ */
+model BongkaranItem {
+  id String @id @default(cuid())
+
+  bongkaranId String    @map("bongkaran_id") @db.VarChar(30)
+  bongkaran   Bongkaran @relation(fields: [bongkaranId], references: [id])
+
+  urutan Int
+
+  /** BAGUS | RUSAK_KEMASAN | RUSAK_TOTAL | ISI_SALAH */
+  kondisi String @db.VarChar(20)
+
+  barcode    String? @db.VarChar(64)
+  sku        String? @db.VarChar(64)
+  namaProduk String? @map("nama_produk") @db.VarChar(191)
+
+  /**
+   * Barcode ADA dan tersimpan, tapi belum terdaftar di Master Produk.
+   * Beda dari ISI_SALAH, yang memang tidak punya barcode sama sekali.
+   */
+  produkTidakDikenal Boolean @default(false) @map("produk_tidak_dikenal")
+
+  /** Nama barang yang benar-benar diterima — hanya untuk ISI_SALAH. */
+  namaDiterima String? @map("nama_diterima") @db.VarChar(191)
+
+  qty Int
+
+  batch String? @db.VarChar(32)
+
+  /** Hasil baca pola batch 6 karakter; NULL bila batch tidak berpola. */
+  mfgDate String? @map("mfg_date") @db.VarChar(10)
+  edDate  String? @map("ed_date") @db.VarChar(10)
+
+  /** true bila ED diisi otomatis dari batch dan TIDAK diubah manual. */
+  edOtomatis Boolean @default(false) @map("ed_otomatis")
+
+  scannedAt DateTime @map("scanned_at")
+
+  @@index([bongkaranId])
+  @@index([sku])
+  @@index([kondisi])
+  @@map("bongkaran_item")
 }

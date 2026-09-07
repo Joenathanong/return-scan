@@ -9,9 +9,16 @@ import type { AppUser } from "@/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * `sesiAktif` TIDAK pernah ikut keluar dari API — nilainya adalah kunci sesi
+ * itu sendiri, dan siapa pun yang tahu isinya bisa memalsukan cookie. Yang
+ * dikirim ke klien hanya `sedangLogin` (boolean) dan label perangkatnya.
+ */
 const toUser = (u: {
   id: string; email: string; name: string; role: string; active: boolean;
-  mustChangePassword: boolean; createdAt: Date; lastLogin: Date | null;
+  mustChangePassword: boolean; bisaBongkaran: boolean;
+  sesiAktif: string | null; perangkatLabel: string | null; sesiSejak: Date | null;
+  createdAt: Date; lastLogin: Date | null;
 }): AppUser => ({
   id: u.id,
   email: u.email,
@@ -19,13 +26,19 @@ const toUser = (u: {
   role: u.role === "admin" ? "admin" : "operator",
   active: u.active,
   mustChangePassword: u.mustChangePassword,
+  bisaBongkaran: u.bisaBongkaran,
+  sedangLogin: Boolean(u.sesiAktif),
+  perangkatLabel: u.perangkatLabel,
+  sesiSejak: u.sesiSejak?.toISOString() ?? null,
   createdAt: u.createdAt.toISOString(),
   lastLogin: u.lastLogin?.toISOString() ?? null,
 });
 
 const PILIH = {
   id: true, email: true, name: true, role: true,
-  active: true, mustChangePassword: true, createdAt: true, lastLogin: true,
+  active: true, mustChangePassword: true, bisaBongkaran: true,
+  sesiAktif: true, perangkatLabel: true, sesiSejak: true,
+  createdAt: true, lastLogin: true,
 } as const;
 
 export async function GET() {
@@ -51,6 +64,7 @@ export async function POST(req: NextRequest) {
     const me = await requireAdmin();
     const body = (await req.json()) as {
       email?: string; name?: string; role?: string; password?: string;
+      bisaBongkaran?: boolean;
     };
 
     const email = requireString(body.email, "Email", 191).toLowerCase();
@@ -70,6 +84,7 @@ export async function POST(req: NextRequest) {
           email, name, role, active: true,
           passwordHash: hashPassword(password),
           mustChangePassword: true,
+          bisaBongkaran: Boolean(body.bisaBongkaran),
           createdBy: me.id,
         },
         select: PILIH,

@@ -34,6 +34,10 @@ const KOLOM_PENTING = [
   ["expedisi", "code", "keunikan kode ekspedisi"],
   ["users", "email", "keunikan email login"],
   ["karung", "nomor_karung", "keunikan nomor karung per hari"],
+  // Modul bongkaran
+  ["produk", "sku", "pencocokan kode SKU"],
+  ["produk_barcode", "barcode", "pencocokan barcode yang di-scan"],
+  ["batch_sku", "batch", "saran batch per SKU"],
 ];
 
 /** Index UNIQUE yang wajib ada. */
@@ -42,6 +46,9 @@ const UNIQUE_WAJIB = [
   ["expedisi", "uq_expedisi_code", "kode ekspedisi tidak bisa kembar"],
   ["users", "uq_user_email", "email tidak bisa dipakai dua akun"],
   ["karung", "uq_karung_exp_date_nomor", "nomor karung unik per ekspedisi per tanggal"],
+  // Modul bongkaran — satu batch hanya boleh tercatat sekali per SKU,
+  // kalau tidak daftar sarannya akan penuh baris kembar.
+  ["batch_sku", "uq_batch_sku", "satu batch hanya tercatat sekali per SKU"],
 ];
 
 const caseInsensitive = (c) => typeof c === "string" && /_ci$/i.test(c);

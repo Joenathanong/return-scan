@@ -21,13 +21,17 @@ export async function PATCH(
     const me = await requireAdmin();
     const { id } = await params;
     const body = (await req.json()) as {
-      name?: string; role?: string; active?: boolean;
+      name?: string; role?: string; active?: boolean; bisaBongkaran?: boolean;
     };
 
     const target = await prisma.user.findUnique({ where: { id } });
     if (!target) throw notFound("User tidak ditemukan.");
 
-    const data: { name?: string; role?: string; active?: boolean } = {};
+    const data: {
+      name?: string; role?: string; active?: boolean;
+      bisaBongkaran?: boolean; sesiAktif?: null;
+      perangkatLabel?: null; sesiSejak?: null;
+    } = {};
 
     if (body.name !== undefined) {
       const v = String(body.name).trim();
@@ -37,6 +41,9 @@ export async function PATCH(
     }
     if (body.role !== undefined) data.role = body.role === "admin" ? "admin" : "operator";
     if (body.active !== undefined) data.active = Boolean(body.active);
+    if (body.bisaBongkaran !== undefined) {
+      data.bisaBongkaran = Boolean(body.bisaBongkaran);
+    }
 
     const turunJadiOperator = data.role === "operator" && target.role === "admin";
     const dinonaktifkan = data.active === false;
@@ -62,12 +69,25 @@ export async function PATCH(
 
     if (Object.keys(data).length === 0) return { ok: true, tidakAdaPerubahan: true };
 
+    // Menonaktifkan akun sekaligus melepas ikatan perangkatnya. Tanpa ini,
+    // baris user yang sudah nonaktif tetap menyandera slot perangkat, dan
+    // saat akun itu diaktifkan lagi kolomnya masih menunjuk sesi lama yang
+    // sudah tidak ada — membingungkan di kolom "Sedang login di".
+    if (data.active === false) {
+      data.sesiAktif = null;
+      data.perangkatLabel = null;
+      data.sesiSejak = null;
+    }
+
     await prisma.user.update({ where: { id }, data });
 
     const jejak: string[] = [];
     if (data.name) jejak.push(`nama → "${data.name}"`);
     if (data.role) jejak.push(`role → ${data.role}`);
     if (data.active !== undefined) jejak.push(data.active ? "diaktifkan" : "dinonaktifkan");
+    if (data.bisaBongkaran !== undefined) {
+      jejak.push(data.bisaBongkaran ? "akses bongkaran diberikan" : "akses bongkaran dicabut");
+    }
     await writeAudit(
       me.id, me.name, "UPDATE_USER",
       `User ${target.email}: ${jejak.join(", ")}`

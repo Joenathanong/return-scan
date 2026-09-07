@@ -15,6 +15,13 @@ export interface AppUser {
   role: UserRole;
   active: boolean;
   mustChangePassword: boolean;
+  /** Izin modul Bongkaran. Admin selalu boleh, tanpa melihat kolom ini. */
+  bisaBongkaran: boolean;
+  /** true kalau saat ini sedang terikat ke sebuah perangkat. */
+  sedangLogin: boolean;
+  /** Ringkasan perangkat yang sedang dipakai, mis. "Chrome · Android". */
+  perangkatLabel: string | null;
+  sesiSejak: string | null;
   createdAt: string;
   lastLogin: string | null;
 }
@@ -26,6 +33,7 @@ export interface SessionUser {
   name: string;
   role: UserRole;
   mustChangePassword: boolean;
+  bisaBongkaran: boolean;
 }
 
 export interface Expedisi {

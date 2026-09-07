@@ -90,6 +90,18 @@ export async function mintaJson<T = unknown>(
 
   if (!res.ok) {
     const d = data as { error?: string; code?: string } | null;
+
+    // Sesi diambil alih perangkat lain. Ditangani DI SINI, bukan di tiap
+    // halaman, karena inilah satu-satunya tempat yang melihat SEMUA balasan
+    // server — kalau tidak, operator akan melihat pesan error merah di
+    // tengah halaman yang tidak bisa dia perbaiki, lalu menekan tombol
+    // berulang kali sampai menyerah.
+    if (d?.code === "SESI_DIGANTI" && typeof window !== "undefined") {
+      window.location.href = "/login?alasan=sesi";
+      // Tetap lempar: pemanggil harus berhenti mengerjakan apa pun selagi
+      // peramban berpindah halaman (perpindahan itu tidak seketika).
+    }
+
     throw new HttpError(
       d?.error || `Permintaan gagal (HTTP ${res.status}).`,
       res.status,

@@ -39,10 +39,25 @@ export function handle<T>(
     .then((data) => NextResponse.json(data ?? { ok: true }))
     .catch((err) => {
       if (err instanceof ApiError) {
-        return NextResponse.json(
+        const res = NextResponse.json(
           { error: err.message, code: err.code },
           { status: err.status }
         );
+
+        // Sesi sudah tidak berlaku → COOKIE-NYA HARUS IKUT DIHAPUS di sini.
+        //
+        // Kalau tidak: klien dilempar ke /login, tapi middleware melihat
+        // cookie masih ada, menganggap orangnya sudah login, dan
+        // memantulkannya kembali ke /dashboard — yang lalu memanggil
+        // /api/auth/me, gagal lagi, dan begitu seterusnya. Layarnya berkedip
+        // tanpa henti dan halaman login tidak pernah sempat tampil.
+        //
+        // Menghapus cookie di sini memutus lingkaran itu di sumbernya:
+        // permintaan berikutnya benar-benar tidak lagi membawa sesi.
+        if (err.code === KODE_SESI_DIGANTI) {
+          res.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+        }
+        return res;
       }
       const e = err as { code?: string; message?: string };
       // Error Prisma yang sering muncul, diterjemahkan supaya berguna.
@@ -78,12 +93,28 @@ export async function getSession(): Promise<SessionPayload | null> {
   return verifySession(jar.get(SESSION_COOKIE)?.value);
 }
 
+/** Kode yang dikenali klien untuk memaksa keluar dan kembali ke /login. */
+export const KODE_SESI_DIGANTI = "SESI_DIGANTI";
+
+export const sesiDiganti = () =>
+  new ApiError(
+    401,
+    "Akun Anda dipakai login di perangkat lain. Sesi di perangkat ini diakhiri.",
+    KODE_SESI_DIGANTI
+  );
+
 /**
  * Sesi yang wajib ada + verifikasi user masih aktif di database.
  *
  * Pengecekan `active` sengaja menyentuh DB setiap request: kalau admin
  * menonaktifkan seorang operator, aksesnya harus putus saat itu juga,
  * bukan menunggu token 12 jam kedaluwarsa.
+ *
+ * LOGIN SATU PERANGKAT menumpang query yang sama. Baris user ini toh sudah
+ * dibaca, jadi membandingkan `sid` cookie dengan `users.sesi_aktif` TIDAK
+ * menambah satu pun perjalanan ke database — hanya satu kolom lagi di SELECT.
+ * Sifatnya "login terbaru menang": login baru menimpa `sesi_aktif`, dan
+ * perangkat lama terputus pada permintaan berikutnya yang ia kirim.
  */
 export async function requireUser() {
   const s = await getSession();
@@ -91,10 +122,32 @@ export async function requireUser() {
 
   const user = await prisma.user.findUnique({
     where: { id: s.uid },
-    select: { id: true, email: true, name: true, role: true, active: true },
+    select: {
+      id: true, email: true, name: true, role: true, active: true,
+      sesiAktif: true, bisaBongkaran: true,
+    },
   });
   if (!user) throw unauthorized("Akun tidak ditemukan.");
   if (!user.active) throw forbidden("Akun Anda dinonaktifkan. Hubungi admin.");
+
+  // Cookie terbitan lama (sebelum fitur ini ada) tidak punya `sid`. Itu
+  // bukan pemalsuan, hanya usang — perlakukan sebagai sesi habis.
+  //
+  // Kodenya SESI_DIGANTI, bukan 401 polos: tanpa kode, klien tidak tahu
+  // harus membuang sesinya dan operator hanya melihat pesan merah di
+  // halaman yang sudah mati. Ini menyangkut SEMUA user yang sedang login
+  // saat versi ini dipasang, jadi jalurnya harus mulus.
+  if (!s.sid) {
+    throw new ApiError(
+      401,
+      "Sesi Anda dibuat sebelum aturan satu-perangkat berlaku. Silakan login lagi.",
+      KODE_SESI_DIGANTI
+    );
+  }
+
+  // sesiAktif NULL = admin menekan "Keluarkan dari perangkat", atau user
+  // sudah logout. Keduanya berarti cookie ini tidak berlaku lagi.
+  if (user.sesiAktif !== s.sid) throw sesiDiganti();
 
   return user;
 }
@@ -102,6 +155,18 @@ export async function requireUser() {
 export async function requireAdmin() {
   const user = await requireUser();
   if (user.role !== "admin") throw forbidden("Khusus admin.");
+  return user;
+}
+
+/**
+ * Akses modul Bongkaran. Admin selalu boleh; operator harus dicentang
+ * "Bisa Bongkaran" di menu Kelola User.
+ */
+export async function requireBongkaran() {
+  const user = await requireUser();
+  if (user.role !== "admin" && !user.bisaBongkaran) {
+    throw forbidden("Anda belum diberi akses ke menu Bongkaran.");
+  }
   return user;
 }
 

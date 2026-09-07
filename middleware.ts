@@ -32,8 +32,17 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Sudah login tapi membuka /login → langsung ke dashboard
-  if (punyaCookie && publik) {
+  // Sudah login tapi membuka /login → langsung ke dashboard.
+  //
+  // KECUALI kalau datangnya karena sesi diambil alih perangkat lain.
+  // Server memang sudah menghapus cookie-nya di jalur itu, jadi syarat ini
+  // seharusnya tidak pernah terpakai — tapi cookie bisa saja tertinggal
+  // (balasan yang gagal sampai, tab lama, mode penyamaran), dan kalau itu
+  // terjadi pantulan ini akan mengunci orangnya dalam lingkaran tak
+  // berujung. Satu baris di sini menutup kemungkinan itu untuk selamanya.
+  const karenaSesiDiganti = req.nextUrl.searchParams.get("alasan") === "sesi";
+
+  if (punyaCookie && publik && !karenaSesiDiganti) {
     const url = req.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
