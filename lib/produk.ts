@@ -48,10 +48,34 @@ export function pisahBarcode(v: unknown): string[] {
   return hasil;
 }
 
+/**
+ * Jenis barcode yang menempel pada satu produk.
+ *
+ * PRODUK — barcode dagang biasa (EAN/UPC) di kemasan.
+ * BPOM   — barcode nomor izin edar BPOM. Di banyak produk kosmetik dan obat,
+ *          inilah yang paling mudah terbaca scanner karena dicetak besar dan
+ *          rapi, sementara barcode dagangnya sering tertutup stiker promo.
+ *
+ * Keduanya disimpan di TABEL YANG SAMA (`produk_barcode`) dengan kolom
+ * `jenis` sebagai pembeda — bukan sebagai kolom terpisah di tabel produk.
+ * Alasannya: pencarian saat scan tidak boleh peduli jenisnya sama sekali.
+ * Operator mengarahkan scanner ke apa pun yang terbaca, dan sistem harus
+ * menemukan produknya lewat satu kali lookup, bukan dua percobaan berturutan.
+ */
+export const JENIS_BARCODE = ["PRODUK", "BPOM"] as const;
+export type JenisBarcode = (typeof JENIS_BARCODE)[number];
+
+export const LABEL_JENIS_BARCODE: Record<JenisBarcode, string> = {
+  PRODUK: "Barcode produk",
+  BPOM: "Barcode BPOM",
+};
+
 export interface BarisProduk {
   sku: string;
   nama: string;
   barcodes: string[];
+  /** Barcode nomor izin edar BPOM. Boleh kosong. */
+  barcodesBpom: string[];
 }
 
 /** Kenapa sebuah baris Excel tidak bisa dipakai. */
@@ -82,7 +106,19 @@ export function periksaBaris(b: BarisProduk): AlasanTolak | null {
   if (!b.nama) return "NAMA_KOSONG";
   if (b.nama.length > NAMA_MAKS) return "NAMA_TERLALU_PANJANG";
   if (b.barcodes.some((x) => x.length > BARCODE_MAKS)) return "BARCODE_TERLALU_PANJANG";
+  if (b.barcodesBpom.some((x) => x.length > BARCODE_MAKS)) return "BARCODE_TERLALU_PANJANG";
   return null;
+}
+
+/**
+ * Kode yang sama didaftarkan sebagai barcode produk SEKALIGUS barcode BPOM.
+ *
+ * Satu kode fisik hanya punya satu arti, jadi ini selalu salah ketik di file
+ * masternya — dan kalau dibiarkan, baris kedua akan menimpa jenis baris
+ * pertama tanpa suara. Dilaporkan, bukan ditebak mana yang benar.
+ */
+export function bentrokJenis(b: BarisProduk): string[] {
+  return b.barcodes.filter((x) => b.barcodesBpom.includes(x));
 }
 
 /**
@@ -95,7 +131,7 @@ export function periksaBaris(b: BarisProduk): AlasanTolak | null {
  * berhenti memakai fitur impor.
  */
 export function tebakKolom(header: string[]): {
-  sku: number; nama: number; barcode: number;
+  sku: number; nama: number; barcode: number; bpom: number;
 } {
   const norm = header.map((h) =>
     String(h ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
@@ -121,6 +157,17 @@ export function tebakKolom(header: string[]): {
     // akan tertangkap lebih dulu karena mengandung "sku".
     sku: cari(["sku", "kodesku", "kode", "itemcode", "kodebarang", "kodeproduk"], ["nama", "deskripsi"]),
     nama: cari(["namasku", "namaproduk", "namabarang", "nama", "deskripsi", "description", "itemname"]),
-    barcode: cari(["barcode", "barcodescan", "ean", "upc", "kodebarcode"]),
+    // "bpom" dan kerabatnya DIHINDARI saat mencari barcode biasa. Tanpa itu,
+    // kolom "Barcode BPOM" akan tertangkap lebih dulu oleh pencarian
+    // "barcode" — keduanya sama-sama mengandung kata itu — dan seluruh
+    // nomor izin edar akan terdaftar sebagai barcode dagang.
+    barcode: cari(
+      ["barcode", "barcodescan", "ean", "upc", "kodebarcode"],
+      ["bpom", "pom", "nie", "izinedar"]
+    ),
+    bpom: cari([
+      "barcodebpom", "bpom", "barcodebpomscan", "nomorbpom", "kodebpom",
+      "nie", "nomorizinedar", "izinedar",
+    ]),
   };
 }

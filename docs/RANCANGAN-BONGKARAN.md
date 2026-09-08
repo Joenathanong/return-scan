@@ -19,6 +19,23 @@ teknis sebelum satu baris kode ditulis.
 
 ---
 
+## 0b. Template impor Master Produk
+
+Halaman `Admin → Master Produk` punya tombol **Unduh template** yang
+menghasilkan `template-master-produk.xlsx` berisi dua sheet:
+
+| Sheet | Isi |
+|---|---|
+| **Master Produk** | Header `Kode SKU`, `Nama SKU`, `Barcode`, `Barcode BPOM` + lima baris contoh yang menunjukkan satu SKU dengan dua barcode (dua baris), beberapa kode dalam satu sel (dipisah koma), SKU tanpa barcode dagang, dan SKU yang hanya punya barcode BPOM |
+| **Petunjuk** | Kolom mana yang wajib, batas panjangnya, dan empat hal yang paling sering ditanyakan — termasuk bahwa impor ulang aman, dan bahwa SKU yang tidak ada di file TIDAK dinonaktifkan |
+
+Templatenya **dirakit di peramban memakai pustaka `xlsx` yang sama dengan
+pembaca impornya**, bukan disimpan sebagai berkas statis di `/public`.
+Berkas statis akan menjadi usang diam-diam begitu daftar header yang
+diterima berubah, dan tidak ada yang mengingatkan.
+
+---
+
 ## 1. Penempatan & menu
 
 Modul masuk ke dalam `scan-retur-v2` yang sudah jalan (bukan aplikasi terpisah),
@@ -63,6 +80,7 @@ model Produk {
 
 model ProdukBarcode {
   barcode   String @id @db.VarChar(64)      // yang benar-benar di-scan
+  jenis     String @default("PRODUK")       // PRODUK | BPOM
   sku       String @db.VarChar(64)
   updatedAt DateTime @updatedAt
   @@index([sku])
@@ -126,6 +144,18 @@ Dua hal yang sengaja begitu:
 - **Barcode dipisah dari SKU** (`ProdukBarcode`). Satu SKU sering punya lebih
   dari satu barcode (karton vs pcs, kemasan lama vs baru). Kalau digabung jadi
   satu kolom, penambahan barcode kedua nanti berarti bongkar tabel.
+- **Barcode BPOM tinggal di tabel yang sama**, dibedakan kolom `jenis`
+  (`PRODUK` | `BPOM`) — bukan sebagai kolom `barcode_bpom` tersendiri.
+  Alasannya menentukan: pencarian saat scan tidak boleh peduli jenisnya.
+  Operator mengarahkan scanner ke apa pun yang paling mudah terbaca di
+  kemasan — pada produk kosmetik dan obat, nomor izin edar justru sering
+  lebih rapi daripada barcode dagang yang tertutup stiker promo — dan sistem
+  menemukannya lewat SATU lookup. Kalau dipisah jadi kolom sendiri, setiap
+  scan yang gagal di kolom pertama harus mencoba kolom kedua: dua kali kerja
+  di jalur yang paling sering dilewati, hanya demi bentuk tabel yang
+  kebetulan terasa lebih rapi dibaca manusia.
+  Satu kode fisik hanya boleh ada di satu jenis; kode yang muncul di kedua
+  kolom DITOLAK saat impor, bukan ditebak mana yang benar.
 - **`barcode`, `sku`, `namaProduk` boleh NULL — tapi hanya untuk `ISI_SALAH`.**
   Aturan ini ditegakkan di lapisan API, bukan sekadar diharapkan: item
   `BAGUS`/`RUSAK_KEMASAN`/`RUSAK_TOTAL` tanpa barcode ditolak dengan 400.
@@ -281,10 +311,13 @@ identitas barang, di posisi yang sama untuk semua kondisi.
 
 **Berdampingan hanya mulai lebar 640 px; di bawah itu bertumpuk.** Layar PDT
 genggam sering hanya ~360 px, dan di lebar itu kolom barcode yang dibagi dua
-tinggal ~150 px — nomor 13 digit tidak terbaca utuh. Daftar saran batch
-sendiri diberi lebar minimum dan boleh melebar melewati kolomnya, supaya
-baris "B26A01 · ED 01-02-2029" tidak terpotong justru pada bagian yang
-membuatnya berguna.
+tinggal ~150 px — nomor 13 digit tidak terbaca utuh. Saat bertumpuk, SEMUA
+kolom berlebar penuh, termasuk Quantity dan Exp. Date: kolom yang dibatasi
+lebarnya akan berdiri kerdil di tengah tumpukan kolom penuh, dan tepi
+kanannya tidak sejajar dengan apa pun. Daftar saran batch sendiri diberi
+lebar minimum dan boleh melebar melewati kolomnya, supaya baris
+"B26A01 · ED 01-02-2029" tidak terpotong justru pada bagian yang membuatnya
+berguna.
 
 ```
         [ + Barang ]

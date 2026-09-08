@@ -3,7 +3,9 @@ import { prisma } from "@/lib/db";
 import {
   handle, requireAdmin, badRequest, notFound, writeAudit,
 } from "@/lib/api";
-import { bersihkanKode, bersihkanNama, pisahBarcode, NAMA_MAKS } from "@/lib/produk";
+import {
+  bersihkanKode, bersihkanNama, pisahBarcode, NAMA_MAKS, type JenisBarcode,
+} from "@/lib/produk";
 
 export const runtime = "nodejs";
 
@@ -34,7 +36,8 @@ export async function PATCH(
     if (!target) throw notFound("Produk tidak ditemukan.");
 
     const body = (await req.json()) as {
-      nama?: string; active?: boolean; barcodes?: string[];
+      nama?: string; active?: boolean;
+      barcodes?: string[]; barcodesBpom?: string[];
     };
 
     const data: { nama?: string; active?: boolean; updatedBy?: string } = {};
@@ -71,8 +74,28 @@ export async function PATCH(
     const bentrok: string[] = [];
     const dipindah: string[] = [];
 
-    if (Array.isArray(body.barcodes)) {
-      const diminta = pisahBarcode(body.barcodes.join(","));
+    if (Array.isArray(body.barcodes) || Array.isArray(body.barcodesBpom)) {
+      // Kedua daftar diurus bersama-sama, bukan bergiliran. Kalau dipisah,
+      // memindahkan satu kode dari kolom Barcode ke kolom Barcode BPOM akan
+      // terbaca sebagai "dilepas" oleh putaran pertama lalu "ditambah" oleh
+      // putaran kedua — dan di antara keduanya kode itu sempat tidak dimiliki
+      // siapa pun.
+      const dimintaProduk = pisahBarcode((body.barcodes ?? []).join(","));
+      const dimintaBpom = pisahBarcode((body.barcodesBpom ?? []).join(","));
+
+      const tumpang = dimintaProduk.filter((x) => dimintaBpom.includes(x));
+      if (tumpang.length > 0) {
+        throw badRequest(
+          `Kode ${tumpang.join(", ")} diisi di kolom Barcode sekaligus Barcode BPOM. ` +
+            "Satu kode fisik hanya punya satu arti — pilih salah satu."
+        );
+      }
+
+      const jenisDiminta = new Map<string, JenisBarcode>([
+        ...dimintaProduk.map((b) => [b, "PRODUK" as JenisBarcode] as const),
+        ...dimintaBpom.map((b) => [b, "BPOM" as JenisBarcode] as const),
+      ]);
+      const diminta = [...jenisDiminta.keys()];
 
       // Semua baris yang menyangkut permintaan ini: yang sekarang milik SKU
       // ini (aktif maupun tidak), plus yang diminta tapi mungkin milik SKU lain.
@@ -81,17 +104,20 @@ export async function PATCH(
           diminta.length > 0
             ? { OR: [{ sku }, { barcode: { in: diminta } }] }
             : { sku },
-        select: { barcode: true, sku: true, active: true },
+        select: { barcode: true, sku: true, active: true, jenis: true },
       });
       const peta = new Map(terkait.map((b) => [b.barcode, b]));
 
       let ditambah = 0;
 
+      let jenisDiubah = 0;
+
       for (const barcode of diminta) {
         const ada = peta.get(barcode);
+        const jenis = jenisDiminta.get(barcode) ?? "PRODUK";
 
         if (!ada) {
-          await prisma.produkBarcode.create({ data: { barcode, sku } });
+          await prisma.produkBarcode.create({ data: { barcode, jenis, sku } });
           ditambah++;
           continue;
         }
@@ -99,9 +125,14 @@ export async function PATCH(
           if (!ada.active) {
             await prisma.produkBarcode.update({
               where: { barcode },
-              data: { active: true },
+              data: { active: true, jenis },
             });
             ditambah++;
+          } else if (ada.jenis !== jenis) {
+            // Kode yang sama dipindahkan antar kolom pada SKU yang sama —
+            // koreksi salah tempat, bukan penambahan.
+            await prisma.produkBarcode.update({ where: { barcode }, data: { jenis } });
+            jenisDiubah++;
           }
           continue;
         }
@@ -116,7 +147,7 @@ export async function PATCH(
         // perpindahannya dicatat di audit supaya tidak diam-diam.
         await prisma.produkBarcode.update({
           where: { barcode },
-          data: { sku, active: true },
+          data: { sku, jenis, active: true },
         });
         dipindah.push(`${barcode} (dari ${ada.sku})`);
       }
@@ -133,6 +164,7 @@ export async function PATCH(
       }
 
       if (ditambah > 0) jejak.push(`+${ditambah} barcode`);
+      if (jenisDiubah > 0) jejak.push(`${jenisDiubah} barcode pindah jenis`);
       if (dipindah.length > 0) jejak.push(`pindah: ${dipindah.join(", ")}`);
       if (dilepas.length > 0) jejak.push(`-${dilepas.length} barcode`);
     }

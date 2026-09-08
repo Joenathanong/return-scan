@@ -33,6 +33,8 @@ const S_META = "meta";
 export interface ProdukCache {
   sku: string;
   nama: string;
+  /** Jenis barcode yang cocok saat lookup: PRODUK atau BPOM. */
+  jenis?: string;
 }
 
 export interface BatchCache {
@@ -58,7 +60,9 @@ interface MetaKursor {
 interface BalasanSync {
   penuh: boolean;
   produk: { sku: string; nama: string; active: boolean; updatedAt: string }[];
-  barcode: { barcode: string; sku: string; active: boolean; updatedAt: string }[];
+  barcode: {
+    barcode: string; sku: string; jenis: string; active: boolean; updatedAt: string;
+  }[];
   batch: {
     id: string; sku: string; batch: string; edDate: string;
     dipakai: number; updatedAt: string;
@@ -252,7 +256,7 @@ export async function sinkron(
         else sProduk.delete(p.sku);
       }
       for (const b of d.barcode) {
-        if (b.active) sBarcode.put({ barcode: b.barcode, sku: b.sku });
+        if (b.active) sBarcode.put({ barcode: b.barcode, sku: b.sku, jenis: b.jenis });
         else sBarcode.delete(b.barcode);
       }
       for (const b of d.batch) {
@@ -313,17 +317,22 @@ export async function cariBarcode(barcode: string): Promise<ProdukCache | null> 
 
   const db = await bukaDb();
 
-  const baris = await hasil<{ barcode: string; sku: string } | undefined>(
+  const baris = await hasil<{ barcode: string; sku: string; jenis?: string } | undefined>(
     db.transaction(S_BARCODE, "readonly").objectStore(S_BARCODE).get(kode)
   );
   if (!baris) return null;
+
+  // Satu lookup untuk kedua jenis barcode. Barcode dagang dan barcode BPOM
+  // menghuni store yang sama, jadi operator boleh menembak mana saja yang
+  // paling mudah terbaca di kemasan.
+  const jenis = baris.jenis ?? "PRODUK";
 
   const produk = await hasil<ProdukCache | undefined>(
     db.transaction(S_PRODUK, "readonly").objectStore(S_PRODUK).get(baris.sku)
   );
   // Barcode ada tapi produknya tidak: master setengah tersinkron. Diberi
   // SKU-nya saja supaya datanya tetap benar, namanya diisi operator.
-  return produk ?? { sku: baris.sku, nama: "" };
+  return produk ? { ...produk, jenis } : { sku: baris.sku, nama: "", jenis };
 }
 
 export const MIN_KARAKTER_SARAN = 4;

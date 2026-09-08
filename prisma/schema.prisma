@@ -317,6 +317,25 @@ model Produk {
 model ProdukBarcode {
   barcode String @id @db.VarChar(64)
 
+  /**
+   * PRODUK | BPOM
+   *
+   * BPOM = barcode nomor izin edar. Di banyak produk kosmetik dan obat,
+   * justru inilah yang paling mudah terbaca scanner: dicetak besar dan rapi,
+   * sementara barcode dagangnya sering tertutup stiker promo atau sudah lecet.
+   *
+   * Disimpan di TABEL YANG SAMA dengan barcode dagang, dibedakan kolom ini —
+   * bukan sebagai kolom `barcode_bpom` terpisah di tabel produk. Alasannya
+   * menentukan: pencarian saat scan tidak boleh peduli jenisnya sama sekali.
+   * Operator mengarahkan scanner ke apa pun yang terbaca, dan sistem harus
+   * menemukan produknya lewat SATU kali lookup, bukan dua percobaan
+   * berturutan. Kalau dipisah jadi kolom sendiri, setiap scan yang gagal di
+   * kolom pertama harus mencoba kolom kedua — dua kali kerja di jalur yang
+   * paling sering dilewati, hanya demi bentuk tabel yang kebetulan terasa
+   * lebih rapi dibaca manusia.
+   */
+  jenis String @default("PRODUK") @db.VarChar(10)
+
   sku    String @db.VarChar(64)
   produk Produk @relation(fields: [sku], references: [sku])
 

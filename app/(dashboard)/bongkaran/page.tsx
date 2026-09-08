@@ -35,6 +35,15 @@ interface Item {
   namaManual: string;
   /** Nama barang yang benar-benar diterima — hanya untuk ISI_SALAH. */
   namaDiterima: string;
+  /**
+   * Jenis barcode yang cocok saat lookup: "PRODUK" atau "BPOM".
+   *
+   * TIDAK ikut disimpan ke database — yang tersimpan tetap kode yang
+   * benar-benar di-scan. Ini murni umpan balik layar: operator yang tanpa
+   * sadar menembak label izin edar perlu tahu bahwa itulah yang terbaca,
+   * bukan barcode dagangnya.
+   */
+  jenisBarcode: string;
   qty: string;
   batch: string;
   edDate: string;
@@ -80,7 +89,7 @@ const itemBaru = (): Item => ({
   kunci: `i${++nomorKartu}`,
   kondisi: null,
   barcode: "", sku: "", nama: "", tidakDikenal: false, namaManual: "",
-  namaDiterima: "", qty: "1", batch: "", edDate: "",
+  namaDiterima: "", jenisBarcode: "", qty: "1", batch: "", edDate: "",
   edOtomatis: false, peringatanBatch: "", offsetMs: null,
 });
 
@@ -647,19 +656,25 @@ function KartuBarang({
     try {
       const p = await cariBarcode(kode);
       if (p && p.nama) {
-        onUbah({ barcode: kode, sku: p.sku, nama: p.nama, tidakDikenal: false, namaManual: "" });
+        onUbah({
+          barcode: kode, sku: p.sku, nama: p.nama,
+          tidakDikenal: false, namaManual: "", jenisBarcode: p.jenis ?? "PRODUK",
+        });
       } else if (p) {
         // Barcode ADA di cache, hanya baris produknya yang belum sampai
         // (master baru tersinkron separuh). Ini BUKAN "tidak dikenal":
         // menandainya begitu akan memasukkan barcode yang sebenarnya sudah
         // terdaftar ke daftar "belum terdaftar" di dashboard, dan admin akan
         // mengejar masalah yang tidak ada.
-        onUbah({ barcode: kode, sku: p.sku, nama: "", tidakDikenal: false });
+        onUbah({
+          barcode: kode, sku: p.sku, nama: "",
+          tidakDikenal: false, jenisBarcode: p.jenis ?? "PRODUK",
+        });
       } else {
-        onUbah({ barcode: kode, sku: "", nama: "", tidakDikenal: true });
+        onUbah({ barcode: kode, sku: "", nama: "", tidakDikenal: true, jenisBarcode: "" });
       }
     } catch {
-      onUbah({ barcode: kode, sku: "", nama: "", tidakDikenal: true });
+      onUbah({ barcode: kode, sku: "", nama: "", tidakDikenal: true, jenisBarcode: "" });
     } finally {
       setMencari(false);
       setTimeout(() => qtyRef.current?.focus(), 0);
@@ -793,6 +808,7 @@ function KartuBarang({
                   onUbah({
                     barcode: e.target.value,
                     sku: "", nama: "", tidakDikenal: false, namaManual: "",
+                    jenisBarcode: "",
                   })
                 }
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); cariProduk(); } }}
@@ -801,7 +817,7 @@ function KartuBarang({
                 // onBlur di atas; keduanya sekarang aman karena kolom
                 // turunannya sudah dikosongkan oleh onChange.
                 className="input-field font-mono"
-                placeholder="Scan barcode produk…"
+                placeholder="Scan barcode produk atau BPOM…"
                 autoComplete="off"
               />
               {mencari && (
@@ -823,6 +839,9 @@ function KartuBarang({
                 <span>
                   {item.nama}
                   <span className="text-slate-400 font-mono text-xs ml-2">{item.sku}</span>
+                  {item.jenisBarcode === "BPOM" && (
+                    <span className="ml-2 badge-info">via barcode BPOM</span>
+                  )}
                 </span>
               </p>
             )}
@@ -895,7 +914,7 @@ function KartuBarang({
           />
         </div>
 
-        <div className="sm:w-[11.5rem] flex-shrink-0">
+        <div className="w-full sm:w-[11.5rem] flex-shrink-0">
           <label className="text-xs font-medium text-slate-600 mb-1.5 block">
             Exp. Date
             {item.edOtomatis && (
@@ -936,7 +955,12 @@ function KolomQty({
   onUbah: (patch: Partial<Item>) => void;
 }) {
   return (
-    <div className="sm:w-24 flex-shrink-0">
+    // LEBAR PENUH saat kartu bertumpuk (layar PDT), selebar 7rem saat
+    // berdampingan. Sebelumnya kolom ini dibatasi 8rem di semua lebar,
+    // sehingga di PDT ia berdiri sendiri jauh lebih pendek daripada Barcode
+    // dan Batch di atas-bawahnya — satu kolom kerdil di tengah tumpukan
+    // kolom penuh, dan tepi kanannya tidak sejajar dengan apa pun.
+    <div className="w-full sm:w-28 flex-shrink-0">
       <label className="text-xs font-medium text-slate-600 mb-1.5 block">Quantity</label>
       <input
         ref={inputRef}
@@ -946,7 +970,9 @@ function KolomQty({
           if (e.key === "Enter") { e.preventDefault(); batchRef.current?.focus(); }
         }}
         inputMode="numeric"
-        className="input-field max-w-[8rem] sm:max-w-none"
+        // Rata tengah supaya angka satu digit — yang paling sering —
+        // tidak tersudut sendirian di kiri kolom yang lebar.
+        className="input-field text-center sm:text-left"
       />
     </div>
   );

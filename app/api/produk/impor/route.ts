@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { handle, requireAdmin, badRequest, writeAudit } from "@/lib/api";
 import {
   bersihkanKode, bersihkanNama, pisahBarcode, periksaBaris, PESAN_TOLAK,
-  type BarisProduk,
+  bentrokJenis, type BarisProduk, type JenisBarcode,
 } from "@/lib/produk";
 
 export const runtime = "nodejs";
@@ -18,6 +18,8 @@ interface Hasil {
   tidakBerubah: number;
   barcodeBaru: number;
   barcodeDipindah: number;
+  /** Kode yang berpindah antara kolom Barcode dan Barcode BPOM. */
+  barcodeUbahJenis: number;
   barcodeBentrok: { barcode: string; sku: string; miliknya: string }[];
   ditolak: { sku: string; alasan: string }[];
 }
@@ -57,6 +59,7 @@ export async function POST(req: NextRequest) {
       tidakBerubah: 0,
       barcodeBaru: 0,
       barcodeDipindah: 0,
+      barcodeUbahJenis: 0,
       barcodeBentrok: [],
       ditolak: [],
     };
@@ -67,12 +70,14 @@ export async function POST(req: NextRequest) {
     const perSku = new Map<string, BarisProduk>();
 
     for (const mentah of body.rows as Record<string, unknown>[]) {
+      const kumpulkan = (v: unknown): string[] =>
+        Array.isArray(v) ? pisahBarcode((v as unknown[]).join(",")) : pisahBarcode(v);
+
       const baris: BarisProduk = {
         sku: bersihkanKode(mentah.sku),
         nama: bersihkanNama(mentah.nama),
-        barcodes: Array.isArray(mentah.barcodes)
-          ? pisahBarcode((mentah.barcodes as unknown[]).join(","))
-          : pisahBarcode(mentah.barcodes),
+        barcodes: kumpulkan(mentah.barcodes),
+        barcodesBpom: kumpulkan(mentah.barcodesBpom),
       };
 
       const salah = periksaBaris(baris);
@@ -81,10 +86,22 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      const tumpang = bentrokJenis(baris);
+      if (tumpang.length > 0) {
+        hasil.ditolak.push({
+          sku: baris.sku,
+          alasan: `${tumpang.join(", ")} diisi di kolom Barcode sekaligus Barcode BPOM`,
+        });
+        continue;
+      }
+
       const ada = perSku.get(baris.sku);
       if (ada) {
         for (const b of baris.barcodes) {
           if (!ada.barcodes.includes(b)) ada.barcodes.push(b);
+        }
+        for (const b of baris.barcodesBpom) {
+          if (!ada.barcodesBpom.includes(b)) ada.barcodesBpom.push(b);
         }
         // Nama dari baris pertama yang menang — baris berikutnya untuk SKU
         // yang sama biasanya hanya mengulang, dan kalaupun berbeda, tidak
@@ -145,16 +162,23 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Barcode ───────────────────────────────────────────────────────────
-    const semuaBarcode = [...perSku.values()].flatMap((b) => b.barcodes);
+    // Barcode dagang dan barcode BPOM diproses BERSAMA dalam satu jalur.
+    // Keduanya menghuni tabel yang sama dan bersaing memperebutkan kode yang
+    // sama; memisahkannya jadi dua putaran berarti bentrok antar-jenis di
+    // dalam satu berkas tidak akan pernah terlihat.
+    const semuaBarcode = [...perSku.values()].flatMap((b) => [
+      ...b.barcodes, ...b.barcodesBpom,
+    ]);
     if (semuaBarcode.length > 0) {
       const barcodeAda = await prisma.produkBarcode.findMany({
         where: { barcode: { in: semuaBarcode } },
-        select: { barcode: true, sku: true, active: true },
+        select: { barcode: true, sku: true, active: true, jenis: true },
       });
       const petaBarcode = new Map(barcodeAda.map((b) => [b.barcode, b]));
 
-      const tambah: { barcode: string; sku: string }[] = [];
-      const ambilAlih: { barcode: string; sku: string }[] = [];
+      const tambah: { barcode: string; sku: string; jenis: JenisBarcode }[] = [];
+      const ambilAlih: { barcode: string; sku: string; jenis: JenisBarcode }[] = [];
+      const ubahJenis: { barcode: string; jenis: JenisBarcode }[] = [];
 
       /**
        * Siapa yang sudah mengklaim tiap barcode DI DALAM potongan ini.
@@ -167,7 +191,12 @@ export async function POST(req: NextRequest) {
       const diklaim = new Map<string, string>();
 
       for (const [sku, baris] of perSku) {
-        for (const barcode of baris.barcodes) {
+        const berjenis: { barcode: string; jenis: JenisBarcode }[] = [
+          ...baris.barcodes.map((b) => ({ barcode: b, jenis: "PRODUK" as JenisBarcode })),
+          ...baris.barcodesBpom.map((b) => ({ barcode: b, jenis: "BPOM" as JenisBarcode })),
+        ];
+
+        for (const { barcode, jenis } of berjenis) {
           const pengklaim = diklaim.get(barcode);
           if (pengklaim !== undefined) {
             if (pengklaim !== sku) {
@@ -178,11 +207,13 @@ export async function POST(req: NextRequest) {
 
           const pemilik = petaBarcode.get(barcode);
           if (pemilik === undefined) {
-            tambah.push({ barcode, sku });
+            tambah.push({ barcode, sku, jenis });
             diklaim.set(barcode, sku);
           } else if (pemilik.sku === sku) {
-            // Sudah benar. Kalau sempat dilepas, dipasang kembali.
-            if (!pemilik.active) ambilAlih.push({ barcode, sku });
+            // Sudah benar. Kalau sempat dilepas, dipasang kembali; kalau
+            // jenisnya berbeda, itu koreksi salah tempat di file master.
+            if (!pemilik.active) ambilAlih.push({ barcode, sku, jenis });
+            else if (pemilik.jenis !== jenis) ubahJenis.push({ barcode, jenis });
             diklaim.set(barcode, sku);
           } else if (pemilik.active) {
             // Masih dipakai SKU lain. TIDAK dipindahkan otomatis:
@@ -192,7 +223,7 @@ export async function POST(req: NextRequest) {
             hasil.barcodeBentrok.push({ barcode, sku, miliknya: pemilik.sku });
           } else {
             // Pemilik lamanya sudah melepas barcode ini — boleh diambil.
-            ambilAlih.push({ barcode, sku });
+            ambilAlih.push({ barcode, sku, jenis });
             diklaim.set(barcode, sku);
           }
         }
@@ -205,15 +236,19 @@ export async function POST(req: NextRequest) {
         });
         hasil.barcodeBaru = count;
       }
-      for (const { barcode, sku } of ambilAlih) {
+      for (const { barcode, sku, jenis } of ambilAlih) {
         // Dijaga `active: false` di klausa where: kalau di antara pembacaan
         // dan penulisan ada impor lain yang mengaktifkannya untuk SKU lain,
         // baris ini tidak jadi menimpanya.
         const { count } = await prisma.produkBarcode.updateMany({
           where: { barcode, active: false },
-          data: { sku, active: true },
+          data: { sku, jenis, active: true },
         });
         if (count > 0) hasil.barcodeDipindah++;
+      }
+      for (const { barcode, jenis } of ubahJenis) {
+        await prisma.produkBarcode.update({ where: { barcode }, data: { jenis } });
+        hasil.barcodeUbahJenis++;
       }
     }
 

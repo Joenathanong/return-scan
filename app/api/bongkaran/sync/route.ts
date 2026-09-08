@@ -20,7 +20,9 @@ const PER_HALAMAN = 1000;
  * gabungan dua tipe array seperti itu tidak bisa dipanggil.
  */
 interface BarisProduk { sku: string; nama: string; active: boolean; updatedAt: Date }
-interface BarisBarcode { barcode: string; sku: string; active: boolean; updatedAt: Date }
+interface BarisBarcode {
+  barcode: string; sku: string; jenis: string; active: boolean; updatedAt: Date;
+}
 interface BarisBatch {
   id: string; sku: string; batch: string; edDate: string;
   dipakai: number; updatedAt: Date;
@@ -121,7 +123,7 @@ export async function GET(req: NextRequest) {
         ? Promise.resolve<BarisBarcode[]>([])
         : prisma.produkBarcode.findMany({
             where: setelah("barcode", kBarcode),
-            select: { barcode: true, sku: true, active: true, updatedAt: true },
+            select: { barcode: true, sku: true, jenis: true, active: true, updatedAt: true },
             orderBy: [{ updatedAt: "asc" }, { barcode: "asc" }],
             take: PER_HALAMAN,
           }),
@@ -154,6 +156,12 @@ export async function GET(req: NextRequest) {
       barcode: barcode.map((b) => ({
         barcode: b.barcode,
         sku: b.sku,
+        // Jenisnya ikut dikirim BUKAN untuk pencarian — pencarian sengaja
+        // tidak membedakannya — melainkan supaya layar scan bisa memberi
+        // tahu operator bahwa yang barusan terbaca adalah nomor izin edar,
+        // bukan barcode dagangnya. Tanpa itu, operator yang tidak sengaja
+        // menembak label BPOM mengira ia sudah men-scan barang yang benar.
+        jenis: b.jenis,
         active: b.active,
         updatedAt: b.updatedAt.toISOString(),
       })),

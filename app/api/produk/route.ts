@@ -5,6 +5,7 @@ import {
 } from "@/lib/api";
 import {
   bersihkanKode, bersihkanNama, pisahBarcode, periksaBaris, PESAN_TOLAK,
+  bentrokJenis, type JenisBarcode,
 } from "@/lib/produk";
 
 export const runtime = "nodejs";
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
           // berlaku.
           barcodes: {
             where: { active: true },
-            select: { barcode: true },
+            select: { barcode: true, jenis: true },
             orderBy: { barcode: "asc" },
           },
         },
@@ -76,7 +77,10 @@ export async function GET(req: NextRequest) {
         nama: p.nama,
         active: p.active,
         updatedAt: p.updatedAt.toISOString(),
-        barcodes: p.barcodes.map((b) => b.barcode),
+        // Dipisah per jenis HANYA untuk ditampilkan. Di database keduanya
+        // tetap satu tabel, dan pencarian saat scan tidak membedakannya.
+        barcodes: p.barcodes.filter((b) => b.jenis !== "BPOM").map((b) => b.barcode),
+        barcodesBpom: p.barcodes.filter((b) => b.jenis === "BPOM").map((b) => b.barcode),
       })),
     };
   });
@@ -92,19 +96,29 @@ export async function POST(req: NextRequest) {
   return handle(async () => {
     const me = await requireAdmin();
     const body = (await req.json()) as {
-      sku?: string; nama?: string; barcodes?: unknown;
+      sku?: string; nama?: string; barcodes?: unknown; barcodesBpom?: unknown;
     };
+
+    const kumpulkan = (v: unknown): string[] =>
+      Array.isArray(v) ? pisahBarcode(v.join(",")) : pisahBarcode(v);
 
     const baris = {
       sku: bersihkanKode(body.sku),
       nama: bersihkanNama(body.nama),
-      barcodes: Array.isArray(body.barcodes)
-        ? pisahBarcode(body.barcodes.join(","))
-        : pisahBarcode(body.barcodes),
+      barcodes: kumpulkan(body.barcodes),
+      barcodesBpom: kumpulkan(body.barcodesBpom),
     };
 
     const salah = periksaBaris(baris);
     if (salah) throw badRequest(PESAN_TOLAK[salah]);
+
+    const bentrok2 = bentrokJenis(baris);
+    if (bentrok2.length > 0) {
+      throw badRequest(
+        `Kode ${bentrok2.join(", ")} diisi sebagai barcode produk sekaligus barcode BPOM. ` +
+          "Satu kode fisik hanya punya satu arti — pilih salah satu."
+      );
+    }
 
     try {
       await prisma.produk.create({
@@ -122,9 +136,14 @@ export async function POST(req: NextRequest) {
     // dan memindahkannya diam-diam jauh lebih berbahaya daripada
     // meninggalkan produk baru tanpa barcode.
     const bentrok: string[] = [];
-    for (const barcode of baris.barcodes) {
+    const semua: { barcode: string; jenis: JenisBarcode }[] = [
+      ...baris.barcodes.map((barcode) => ({ barcode, jenis: "PRODUK" as JenisBarcode })),
+      ...baris.barcodesBpom.map((barcode) => ({ barcode, jenis: "BPOM" as JenisBarcode })),
+    ];
+
+    for (const { barcode, jenis } of semua) {
       try {
-        await prisma.produkBarcode.create({ data: { barcode, sku: baris.sku } });
+        await prisma.produkBarcode.create({ data: { barcode, jenis, sku: baris.sku } });
       } catch (err) {
         if (!isUniqueViolation(err)) throw err;
         // Sudah ada. Boleh diambil alih HANYA kalau pemilik lamanya sudah
@@ -132,7 +151,7 @@ export async function POST(req: NextRequest) {
         // tidak pernah berpindah diam-diam.
         const dipindahkan = await prisma.produkBarcode.updateMany({
           where: { barcode, active: false },
-          data: { sku: baris.sku, active: true },
+          data: { sku: baris.sku, jenis, active: true },
         });
         if (dipindahkan.count === 0) bentrok.push(barcode);
       }
@@ -140,7 +159,8 @@ export async function POST(req: NextRequest) {
 
     await writeAudit(
       me.id, me.name, "PRODUK_TAMBAH",
-      `${baris.sku} — ${baris.nama} (${baris.barcodes.length} barcode)`
+      `${baris.sku} — ${baris.nama} (${baris.barcodes.length} barcode, ` +
+        `${baris.barcodesBpom.length} barcode BPOM)`
     );
 
     return { ok: true, sku: baris.sku, bentrok };
