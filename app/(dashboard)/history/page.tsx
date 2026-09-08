@@ -102,7 +102,7 @@ export default function HistoryPage() {
   const totalResi = rows.reduce((a, k) => a + k.totalResi, 0);
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="shell">
       <div>
         <h1 className="page-title">Riwayat Karung</h1>
         <p className="page-sub">

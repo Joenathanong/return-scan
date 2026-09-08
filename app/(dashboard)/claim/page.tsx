@@ -162,7 +162,7 @@ function Isi() {
   };
 
   return (
-    <div className="max-w-full mx-auto space-y-5">
+    <div className="shell">
       {/* Header */}
       <div>
         <h1 className="page-title">Kelola Claim</h1>

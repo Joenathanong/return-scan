@@ -124,7 +124,7 @@ export async function requireUser() {
     where: { id: s.uid },
     select: {
       id: true, email: true, name: true, role: true, active: true,
-      sesiAktif: true, bisaBongkaran: true,
+      sesiAktif: true, bisaBongkaran: true, bisaCancelOrder: true,
     },
   });
   if (!user) throw unauthorized("Akun tidak ditemukan.");
@@ -166,6 +166,32 @@ export async function requireBongkaran() {
   const user = await requireUser();
   if (user.role !== "admin" && !user.bisaBongkaran) {
     throw forbidden("Anda belum diberi akses ke menu Bongkaran.");
+  }
+  return user;
+}
+
+/** Akses modul Cancel Order. Admin selalu boleh. */
+export async function requireCancelOrder() {
+  const user = await requireUser();
+  if (user.role !== "admin" && !user.bisaCancelOrder) {
+    throw forbidden("Anda belum diberi akses ke menu Cancel Order.");
+  }
+  return user;
+}
+
+/**
+ * Boleh membaca Master Produk (dan cache-nya di PDT).
+ *
+ * Dipisah dari izin per-modul karena master produk BUKAN milik satu modul:
+ * Bongkaran dan Cancel Order sama-sama mencocokkan barcode ke SKU yang
+ * sama. Kalau sinkron cache dijaga oleh requireBongkaran(), operator yang
+ * hanya diberi akses Cancel Order akan melihat semua barcode-nya "tidak
+ * dikenal" — dan penyebabnya tidak akan terlihat di mana pun.
+ */
+export async function requireMasterProduk() {
+  const user = await requireUser();
+  if (user.role !== "admin" && !user.bisaBongkaran && !user.bisaCancelOrder) {
+    throw forbidden("Anda belum diberi akses ke data produk.");
   }
   return user;
 }

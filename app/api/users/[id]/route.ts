@@ -21,7 +21,8 @@ export async function PATCH(
     const me = await requireAdmin();
     const { id } = await params;
     const body = (await req.json()) as {
-      name?: string; role?: string; active?: boolean; bisaBongkaran?: boolean;
+      name?: string; role?: string; active?: boolean;
+      bisaBongkaran?: boolean; bisaCancelOrder?: boolean;
     };
 
     const target = await prisma.user.findUnique({ where: { id } });
@@ -29,7 +30,7 @@ export async function PATCH(
 
     const data: {
       name?: string; role?: string; active?: boolean;
-      bisaBongkaran?: boolean; sesiAktif?: null;
+      bisaBongkaran?: boolean; bisaCancelOrder?: boolean; sesiAktif?: null;
       perangkatLabel?: null; sesiSejak?: null;
     } = {};
 
@@ -43,6 +44,9 @@ export async function PATCH(
     if (body.active !== undefined) data.active = Boolean(body.active);
     if (body.bisaBongkaran !== undefined) {
       data.bisaBongkaran = Boolean(body.bisaBongkaran);
+    }
+    if (body.bisaCancelOrder !== undefined) {
+      data.bisaCancelOrder = Boolean(body.bisaCancelOrder);
     }
 
     const turunJadiOperator = data.role === "operator" && target.role === "admin";
@@ -87,6 +91,11 @@ export async function PATCH(
     if (data.active !== undefined) jejak.push(data.active ? "diaktifkan" : "dinonaktifkan");
     if (data.bisaBongkaran !== undefined) {
       jejak.push(data.bisaBongkaran ? "akses bongkaran diberikan" : "akses bongkaran dicabut");
+    }
+    if (data.bisaCancelOrder !== undefined) {
+      jejak.push(
+        data.bisaCancelOrder ? "akses cancel order diberikan" : "akses cancel order dicabut"
+      );
     }
     await writeAudit(
       me.id, me.name, "UPDATE_USER",

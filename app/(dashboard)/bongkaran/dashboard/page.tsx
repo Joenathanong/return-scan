@@ -9,7 +9,7 @@ import { mintaJson, pesanError } from "@/lib/http";
 import { LABEL_KONDISI, type Kondisi } from "@/lib/bongkaran";
 import {
    Loader2, AlertCircle, CheckCircle2, X, PackageOpen,
-  Barcode, Clock, Trash2, RefreshCw, FileSpreadsheet,
+  Barcode, Clock, Trash2, RefreshCw, FileSpreadsheet, Video, Wand2,
 } from "lucide-react";
 
 interface Data {
@@ -21,6 +21,7 @@ interface Data {
   draft: { id: string; noResi: string; tanggal: string; scannedAt: string; oleh: string }[];
   barcodeAsing: { barcode: string; jumlah: number; namaDitulis: string }[];
   waktuMeragukan: number;
+  kamera: { kamera: number | null; resi: number }[];
 }
 
 /**
@@ -84,6 +85,48 @@ function Isi() {
 
   useEffect(() => { muat(); }, [muat]);
 
+  const [mencocokkan, setMencocokkan] = useState(false);
+
+  /**
+   * Mencocokkan ulang barcode "belum terdaftar" dengan Master Produk.
+   *
+   * Tanda "belum terdaftar" itu benar SAAT barangnya di-scan. Begitu admin
+   * mendaftarkan barcode-nya, tanda tadi jadi usang — tapi baris lamanya
+   * tetap menyandangnya dan terus muncul di daftar ini, sehingga orang
+   * menyimpulkan pendaftarannya gagal padahal berhasil. Tombol ini yang
+   * membereskannya, dan sekaligus menjawab pertanyaan "barcode ini
+   * sebenarnya sudah terdaftar belum?" dengan memeriksa, bukan menebak.
+   */
+  const cocokkanUlang = async () => {
+    setMencocokkan(true);
+    setError("");
+    try {
+      const r = await mintaJson<{
+        diperbaiki: number; barisDiperbaiki: number; masihAsing: string[];
+      }>("/api/bongkaran/cocokkan", { method: "POST", body: {}, timeoutMs: 60_000 });
+
+      if (r.barisDiperbaiki === 0) {
+        setInfo(
+          r.masihAsing.length > 0
+            ? `Tidak ada yang cocok. ${r.masihAsing.length} barcode memang belum ada di Master Produk — daftarkan dulu di sana, lalu tekan tombol ini lagi.`
+            : "Tidak ada barcode yang perlu dicocokkan."
+        );
+      } else {
+        setInfo(
+          `${r.diperbaiki} barcode cocok — ${r.barisDiperbaiki} baris diperbaiki` +
+            (r.masihAsing.length > 0
+              ? `. ${r.masihAsing.length} barcode masih belum terdaftar.`
+              : ". Daftarnya bersih sekarang.")
+        );
+      }
+      muat();
+    } catch (e) {
+      setError(pesanError(e, "Gagal mencocokkan barcode."));
+    } finally {
+      setMencocokkan(false);
+    }
+  };
+
   const buangDraft = async (id: string, noResi: string) => {
     try {
       await mintaJson(`/api/bongkaran/${id}`, { method: "DELETE" });
@@ -97,7 +140,7 @@ function Isi() {
   const puncak = Math.max(1, ...(d?.grafik.map((g) => g.resi) ?? [1]));
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="shell">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Dashboard Bongkaran</h1>
@@ -148,8 +191,11 @@ function Isi() {
 
           {/* ── Grafik 14 hari ── */}
           <div className="card p-5">
-            <p className="font-semibold text-heading text-sm mb-4">14 hari terakhir</p>
-            <div className="flex items-end gap-1.5 h-32">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="accent-bar" aria-hidden="true" />
+              <p className="font-semibold text-heading text-sm">14 hari terakhir</p>
+            </div>
+            <div className="flex items-end gap-1.5 h-40 sm:h-48">
               {d.grafik.map((g) => (
                 <div key={g.tanggal} className="flex-1 flex flex-col items-center gap-1 group">
                   <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100">
@@ -169,6 +215,53 @@ function Isi() {
             </div>
           </div>
 
+          {/* ── Sebaran kamera ── */}
+          <div className="card p-5">
+            <p className="font-semibold text-heading text-sm flex items-center gap-2">
+              <Video className="w-4 h-4 text-gray-400" /> Kamera meja bongkar
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5 mb-4">
+              Dipakai mencocokkan jam scan dengan rekaman CCTV. Kalau beberapa meja
+              berjalan tapi angkanya menumpuk di satu kamera, ada yang salah pilih di awal.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {d.kamera.map((k) => (
+                <div
+                  key={k.kamera ?? "tanpa"}
+                  className={cn(
+                    "rounded-xl border p-3",
+                    k.kamera === null
+                      ? "bg-gray-50 border-gray-300"
+                      : k.resi > 0
+                        ? "bg-brand-50 border-brand-200"
+                        : "bg-white border-gray-300"
+                  )}
+                >
+                  <p className="text-xs font-medium text-gray-600">
+                    {k.kamera === null ? "Tanpa kamera" : `Kamera ${k.kamera}`}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-2xl font-bold tabular-nums mt-0.5",
+                      k.kamera === null ? "text-gray-400" : "text-brand-700"
+                    )}
+                  >
+                    {k.resi.toLocaleString("id-ID")}
+                  </p>
+                  <p className="text-xs text-gray-400">resi</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/*
+            Dua panel berdampingan di layar lebar.
+            Sebelumnya semuanya bertumpuk satu kolom, jadi di layar desktop
+            separuh kanan kosong sementara panel-panel pendek ini memanjang
+            ke bawah dan memaksa gulir untuk hal yang justru dibaca
+            bersamaan tiap pagi.
+          */}
+          <div className="grid lg:grid-cols-2 gap-5 items-start">
           {/* ── Operator ── */}
           <div className="card">
             <p className="font-semibold text-heading text-sm p-4 pb-2">Per operator</p>
@@ -229,6 +322,8 @@ function Isi() {
             )}
           </div>
 
+          </div>
+
           {/* ── Barcode tidak dikenal ── */}
           <div className="card">
             <div className="p-4 pb-2">
@@ -236,11 +331,32 @@ function Isi() {
                 <Barcode className="w-4 h-4 text-gray-400" /> Barcode belum terdaftar
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Barcode yang sempat di-scan tapi tidak ada di Master Produk. Namanya
-                diketik operator saat itu.
-                {isAdmin && " Daftarkan lewat Master Produk supaya tidak berulang."}
+                Barcode yang sempat di-scan tapi tidak ada di Master Produk saat itu.
+                Kalau barcode-nya sekarang <em>sudah</em> terdaftar, tekan{" "}
+                <strong>Cocokkan ulang</strong> — barisnya akan diperbaiki dengan
+                nama resmi dari master dan hilang dari daftar ini.
               </p>
             </div>
+            {d.barcodeAsing.length > 0 && (
+              <div className="px-4 pb-3 flex flex-wrap gap-2">
+                <button
+                  onClick={cocokkanUlang}
+                  disabled={mencocokkan}
+                  className="btn-secondary text-xs"
+                >
+                  {mencocokkan
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Wand2 className="w-3.5 h-3.5" />}
+                  Cocokkan ulang dengan Master Produk
+                </button>
+                {isAdmin && (
+                  <Link href="/admin/produk" className="btn-ghost text-xs">
+                    <PackageOpen className="w-3.5 h-3.5" /> Buka Master Produk
+                  </Link>
+                )}
+              </div>
+            )}
+
             {d.barcodeAsing.length === 0 ? (
               <p className="text-sm text-gray-400 px-4 pb-4">Tidak ada.</p>
             ) : (
@@ -256,17 +372,10 @@ function Isi() {
                 ))}
               </div>
             )}
-            {isAdmin && d.barcodeAsing.length > 0 && (
-              <div className="px-4 pb-4">
-                <Link href="/admin/produk" className="btn-ghost text-xs">
-                  <PackageOpen className="w-3.5 h-3.5" /> Buka Master Produk
-                </Link>
-              </div>
-            )}
           </div>
 
           {d.waktuMeragukan > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex gap-2.5 text-sm text-amber-800">
+            <div className="bg-warn-bg border border-warn/30 rounded-xl px-4 py-3 flex gap-2.5 text-sm text-warn">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <p>
                 {d.waktuMeragukan} resi dalam 14 hari terakhir waktunya diambil dari jam

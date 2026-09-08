@@ -150,6 +150,7 @@ export async function POST(req: NextRequest) {
       role,
       mustChangePassword: user.mustChangePassword,
       bisaBongkaran: user.role === "admin" || user.bisaBongkaran,
+      bisaCancelOrder: user.role === "admin" || user.bisaCancelOrder,
     };
 
     const res = NextResponse.json({ user: sessionUser });

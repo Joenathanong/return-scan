@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { handle, requireBongkaran } from "@/lib/api";
+import { handle, requireMasterProduk } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +54,7 @@ interface BarisBatch {
  */
 export async function GET(req: NextRequest) {
   return handle(async () => {
-    await requireBongkaran();
+    await requireMasterProduk();
 
     const url = new URL(req.url);
 

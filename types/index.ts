@@ -17,6 +17,8 @@ export interface AppUser {
   mustChangePassword: boolean;
   /** Izin modul Bongkaran. Admin selalu boleh, tanpa melihat kolom ini. */
   bisaBongkaran: boolean;
+  /** Izin modul Cancel Order. Admin selalu boleh. */
+  bisaCancelOrder: boolean;
   /** true kalau saat ini sedang terikat ke sebuah perangkat. */
   sedangLogin: boolean;
   /** Ringkasan perangkat yang sedang dipakai, mis. "Chrome · Android". */
@@ -34,6 +36,7 @@ export interface SessionUser {
   role: UserRole;
   mustChangePassword: boolean;
   bisaBongkaran: boolean;
+  bisaCancelOrder: boolean;
 }
 
 export interface Expedisi {

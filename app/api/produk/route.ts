@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma, isUniqueViolation } from "@/lib/db";
 import {
-  handle, requireAdmin, requireBongkaran, badRequest, conflict, writeAudit,
+  handle, requireAdmin, requireMasterProduk, badRequest, conflict, writeAudit,
 } from "@/lib/api";
 import {
   bersihkanKode, bersihkanNama, pisahBarcode, periksaBaris, PESAN_TOLAK,
@@ -24,7 +24,7 @@ const BATAS_MAKS = 500;
  */
 export async function GET(req: NextRequest) {
   return handle(async () => {
-    await requireBongkaran();
+    await requireMasterProduk();
 
     const url = new URL(req.url);
     const q = bersihkanNama(url.searchParams.get("q")).slice(0, 100);

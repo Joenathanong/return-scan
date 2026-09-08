@@ -53,15 +53,17 @@ model User {
   // role akan meledak. Satu boolean per modul jauh lebih mudah dibaca dan
   // tidak mengubah arti role yang sudah dipakai di seluruh aplikasi.
   // Admin selalu boleh, tanpa melihat kolom ini.
-  bisaBongkaran Boolean @default(false) @map("bisa_bongkaran")
+  bisaBongkaran   Boolean @default(false) @map("bisa_bongkaran")
+  bisaCancelOrder Boolean @default(false) @map("bisa_cancel_order")
 
   createdAt DateTime  @default(now()) @map("created_at")
   createdBy String?   @map("created_by") @db.VarChar(30)
   lastLogin DateTime? @map("last_login")
 
-  karungDibuat Karung[]     @relation("KarungCreatedBy")
-  scans        Scan[]       @relation("ScanBy")
-  bongkaran    Bongkaran[]  @relation("BongkaranBy")
+  karungDibuat Karung[]      @relation("KarungCreatedBy")
+  scans        Scan[]        @relation("ScanBy")
+  bongkaran    Bongkaran[]   @relation("BongkaranBy")
+  cancelOrder  CancelOrder[] @relation("CancelOrderBy")
 
   @@index([active])
   @@map("users")
@@ -420,6 +422,22 @@ model Bongkaran {
    */
   klienKunci String? @unique(map: "uq_bongkaran_klien") @map("klien_kunci") @db.VarChar(64)
 
+  /**
+   * Nomor kamera CCTV yang mengawasi meja bongkar: 1–4.
+   *
+   * Gunanya menjembatani data dan rekaman. `scanned_at` sudah menjawab
+   * "jam berapa", dan kolom ini menjawab "kamera mana" — dua-duanya
+   * diperlukan untuk membuka rekaman yang benar ketika sebuah baris
+   * dipertanyakan.
+   *
+   * NULLABLE, dan itu disengaja: seluruh baris yang tercatat SEBELUM fitur
+   * ini ada memang tidak punya nomor kamera. Memberi nilai bawaan 1 akan
+   * membuat ribuan baris lama mengaku diawasi kamera 1 — pernyataan yang
+   * tidak pernah ada yang membuatnya, dan justru menyesatkan orang yang
+   * kelak mencari rekamannya.
+   */
+  kamera Int? @db.SmallInt
+
   scannedById String @map("scanned_by") @db.VarChar(30)
   scannedBy   User   @relation("BongkaranBy", fields: [scannedById], references: [id])
 
@@ -497,4 +515,93 @@ model BongkaranItem {
   @@index([sku])
   @@index([kondisi])
   @@map("bongkaran_item")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANCEL ORDER
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Satu SESI input gabungan barang batal kirim.
+ *
+ * Bedanya dengan Bongkaran, dan kenapa bentuknya memang harus berbeda:
+ * barang cancel order TIDAK punya nomor resi — ia batal sebelum sempat
+ * dikirim. Ia juga tidak dibongkar satu paket per satu paket; barangnya
+ * menumpuk di rak dulu, lalu dicatat sekaligus. Jadi yang mengelompokkan
+ * data di sini adalah SESI PENCATATAN, bukan paket.
+ *
+ * Konsekuensi yang disengaja: `recordedAt` adalah waktu PENCATATAN, bukan
+ * waktu barang di-scan satu per satu. Di Bongkaran, jarak antar-barang
+ * bermakna (berapa lama satu paket dibongkar); di sini tidak — barangnya
+ * sudah lama tergeletak di rak, dan yang layak dicatat adalah kapan
+ * seseorang duduk dan mendaftarnya. Mengarang stempel waktu per barang di
+ * sini hanya akan membuat data terlihat lebih presisi daripada kenyataannya.
+ */
+model CancelOrder {
+  id String @id @default(cuid())
+
+  /** Nomor rujukan yang bisa disebut orang: "CO-20260908-003". */
+  kode String @unique(map: "uq_cancel_order_kode") @db.VarChar(32)
+
+  /** Keterangan bebas: asal barang, nomor berita acara, dsb. */
+  catatan String? @db.VarChar(255)
+
+  /** Tanggal bisnis WIB "YYYY-MM-DD", dihitung di server. */
+  date String @db.VarChar(10)
+
+  recordedAt   DateTime @map("recorded_at")
+  recordedById String   @map("recorded_by") @db.VarChar(30)
+  recordedBy   User     @relation("CancelOrderBy", fields: [recordedById], references: [id])
+
+  /** final | voided. Tidak ada draft: pencatatan di sini sekali jalan. */
+  status String @default("final") @db.VarChar(16)
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by") @db.VarChar(30)
+  voidReason String?   @map("void_reason") @db.VarChar(255)
+
+  items CancelOrderItem[]
+
+  @@index([date])
+  @@index([status])
+  @@index([recordedById])
+  @@map("cancel_order")
+}
+
+/**
+ * Satu baris barang dalam sesi.
+ *
+ * Yang dicatat hanya tiga hal — produk, jumlah, batch — sesuai permintaan.
+ * `edDate` ikut disimpan HANYA kalau batch-nya berpola tanggal dan bisa
+ * dibaca otomatis; ia gratis (aturannya sudah ada di lib/bongkaran.ts) dan
+ * berguna kalau nanti barangnya mau dijual lagi. Tidak pernah wajib.
+ *
+ * `sku` dan `namaProduk` adalah SNAPSHOT, sama seperti di Bongkaran: nama
+ * produk yang diralat bulan depan tidak boleh mengubah catatan bulan ini.
+ */
+model CancelOrderItem {
+  id String @id @default(cuid())
+
+  cancelOrderId String      @map("cancel_order_id") @db.VarChar(30)
+  cancelOrder   CancelOrder @relation(fields: [cancelOrderId], references: [id])
+
+  urutan Int
+
+  barcode    String? @db.VarChar(64)
+  sku        String? @db.VarChar(64)
+  namaProduk String  @map("nama_produk") @db.VarChar(191)
+
+  /** Barcode tercatat tapi belum terdaftar di Master Produk. */
+  produkTidakDikenal Boolean @default(false) @map("produk_tidak_dikenal")
+
+  qty Int
+
+  batch      String? @db.VarChar(32)
+  mfgDate    String? @map("mfg_date") @db.VarChar(10)
+  edDate     String? @map("ed_date") @db.VarChar(10)
+  edOtomatis Boolean @default(false) @map("ed_otomatis")
+
+  @@index([cancelOrderId])
+  @@index([sku])
+  @@map("cancel_order_item")
 }

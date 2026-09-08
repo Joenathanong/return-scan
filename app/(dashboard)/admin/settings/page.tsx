@@ -116,7 +116,7 @@ function Isi() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="shell-form">
       <div>
         <h1 className="page-title">Pengaturan Sistem</h1>
         <p className="page-sub">Konfigurasi aplikasi dan integrasi</p>

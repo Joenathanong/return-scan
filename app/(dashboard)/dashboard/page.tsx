@@ -66,7 +66,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="shell space-y-6">
       {/*
         Banner sambutan — satu-satunya tempat gradien hero dipakai di dalam
         aplikasi. Design system membatasi gradien ke enam tempat; ini yang

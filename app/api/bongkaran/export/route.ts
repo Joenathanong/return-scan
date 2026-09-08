@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       },
       select: {
         id: true,
+        urutan: true,
         kondisi: true,
         barcode: true,
         sku: true,
@@ -64,13 +65,18 @@ export async function GET(req: NextRequest) {
         qty: true,
         batch: true,
         edDate: true,
+        edOtomatis: true,
         scannedAt: true,
         bongkaran: {
           select: {
             noResi: true,
             date: true,
             scannedAt: true,
+            kamera: true,
             scannedBy: { select: { name: true } },
+            // Jumlah barang dalam resi yang sama, dihitung database.
+            // Dipakai membentuk penomoran "1 of 2" di kolom Line.
+            _count: { select: { items: true } },
           },
         },
       },
@@ -115,7 +121,16 @@ export async function GET(req: NextRequest) {
       lagi: rows.length === PER_HALAMAN,
       kursor: rows.length > 0 ? rows[rows.length - 1].id : null,
       rows: rows.map((r) => ({
+        // Id baris ikut dikirim supaya layar bisa menyunting baris yang
+        // ganjil di tempat, tanpa perlu memuat ulang seluruh laporan.
+        id: r.id,
         noResi: r.bongkaran.noResi,
+        // Posisi barang di dalam resinya: urutan ke-berapa dari berapa.
+        // Dikirim sebagai dua angka, bukan sebagai teks "1 of 2" — bentuk
+        // tulisannya urusan layar, dan angka mentah tetap bisa difilter
+        // maupun diurutkan kalau kelak dibutuhkan.
+        urutan: r.urutan,
+        totalBaris: r.bongkaran._count.items,
         barcode: r.barcode ?? "",
         sku: r.sku ?? "",
         // Untuk barcode yang belum terdaftar, nama yang diketik operator
@@ -124,6 +139,10 @@ export async function GET(req: NextRequest) {
         namaSku: r.namaProduk ?? "",
         qty: r.qty,
         kondisi: isKondisi(r.kondisi) ? LABEL_KONDISI[r.kondisi] : r.kondisi,
+        // Kode mentahnya ikut, karena dialog sunting butuh nilai yang bisa
+        // dikirim balik ke server — bukan labelnya.
+        kondisiKode: r.kondisi,
+        edOtomatis: r.edOtomatis,
         namaDiterima: r.namaDiterima ?? "",
         batch: r.batch ?? "",
         edDate: r.edDate ?? "",
@@ -134,6 +153,10 @@ export async function GET(req: NextRequest) {
         scanDate: r.scannedAt.toISOString(),
         tanggal: r.bongkaran.date,
         produkTidakDikenal: r.produkTidakDikenal,
+        // Kamera + Scan Date adalah pasangan: yang satu menjawab "kamera
+        // mana", yang lain "jam berapa". Keduanya diperlukan untuk membuka
+        // rekaman yang benar saat sebuah baris dipertanyakan.
+        kamera: r.bongkaran.kamera,
         // Kosong berarti resi ini belum ada di Scan Retur — keadaan yang
         // memang sah (bongkar boleh mendahului scan retur), bukan kesalahan.
         expedisi: petaExpedisi.get(r.bongkaran.noResi) ?? "",

@@ -8,7 +8,7 @@ import { mintaJson, pesanError } from "@/lib/http";
 import type { AppUser } from "@/types";
 import {
    Plus, Loader2, AlertCircle, CheckCircle2, KeyRound,
-  ShieldCheck, User as UserIcon, X, MonitorSmartphone, PackageOpen, LogOut,
+  ShieldCheck, User as UserIcon, X, MonitorSmartphone, PackageOpen, LogOut, XCircle,
 } from "lucide-react";
 
 export default function AdminUsersPage() {
@@ -45,6 +45,7 @@ function Isi() {
   const [fRole, setFRole] = useState<"admin" | "operator">("operator");
   const [fPassword, setFPassword] = useState("");
   const [fBongkaran, setFBongkaran] = useState(false);
+  const [fCancel, setFCancel] = useState(false);
   const [menyimpan, setMenyimpan] = useState(false);
 
   const [resetUntuk, setResetUntuk] = useState<AppUser | null>(null);
@@ -73,7 +74,7 @@ function Isi() {
         method: "POST",
         body: {
           email: fEmail, name: fNama, role: fRole,
-          password: fPassword, bisaBongkaran: fBongkaran,
+          password: fPassword, bisaBongkaran: fBongkaran, bisaCancelOrder: fCancel,
         },
       });
       setInfo(
@@ -81,7 +82,7 @@ function Isi() {
       );
       setFormBuka(false);
       setFEmail(""); setFNama(""); setFPassword("");
-      setFRole("operator"); setFBongkaran(false);
+      setFRole("operator"); setFBongkaran(false); setFCancel(false);
       muat();
     } catch (e) {
       setError(pesanError(e, "Gagal membuat user."));
@@ -154,7 +155,7 @@ function Isi() {
   };
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="shell">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Kelola User</h1>
@@ -213,21 +214,38 @@ function Isi() {
             </div>
           </div>
 
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={fRole === "admin" || fBongkaran}
-              disabled={fRole === "admin"}
-              onChange={(e) => setFBongkaran(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 disabled:opacity-50"
-            />
-            <span className="text-sm text-ink">
-              Bisa mengakses menu <strong>Bongkaran</strong>
-              {fRole === "admin" && (
-                <span className="text-gray-400"> — admin selalu bisa</span>
-              )}
-            </span>
-          </label>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={fRole === "admin" || fBongkaran}
+                disabled={fRole === "admin"}
+                onChange={(e) => setFBongkaran(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 disabled:opacity-50"
+              />
+              <span className="text-sm text-ink">
+                Menu <strong>Bongkaran</strong>
+                {fRole === "admin" && (
+                  <span className="text-gray-400"> — admin selalu bisa</span>
+                )}
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={fRole === "admin" || fCancel}
+                disabled={fRole === "admin"}
+                onChange={(e) => setFCancel(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 disabled:opacity-50"
+              />
+              <span className="text-sm text-ink">
+                Menu <strong>Cancel Order</strong>
+                {fRole === "admin" && (
+                  <span className="text-gray-400"> — admin selalu bisa</span>
+                )}
+              </span>
+            </label>
+          </div>
 
           <p className="text-xs text-gray-400">
             User akan diminta mengganti password ini saat login pertama.
@@ -282,6 +300,11 @@ function Isi() {
                       {(admin || u.bisaBongkaran) && (
                         <span className="badge-info inline-flex items-center gap-1">
                           <PackageOpen className="w-3 h-3" /> Bongkaran
+                        </span>
+                      )}
+                      {(admin || u.bisaCancelOrder) && (
+                        <span className="badge-info inline-flex items-center gap-1">
+                          <XCircle className="w-3 h-3" /> Cancel Order
                         </span>
                       )}
                       {u.mustChangePassword && (
@@ -343,6 +366,20 @@ function Isi() {
                       }
                     >
                       {u.bisaBongkaran ? "Cabut Bongkaran" : "Beri Bongkaran"}
+                    </button>
+                    <button
+                      onClick={() => ubah(u, { bisaCancelOrder: !u.bisaCancelOrder })}
+                      disabled={admin}
+                      className="btn-ghost text-xs disabled:opacity-30"
+                      title={
+                        admin
+                          ? "Admin selalu punya akses Cancel Order"
+                          : u.bisaCancelOrder
+                            ? "Cabut akses menu Cancel Order"
+                            : "Beri akses menu Cancel Order"
+                      }
+                    >
+                      {u.bisaCancelOrder ? "Cabut Cancel Order" : "Beri Cancel Order"}
                     </button>
                     <button
                       onClick={() => ubah(u, { role: admin ? "operator" : "admin" })}
@@ -445,7 +482,7 @@ function Isi() {
               <button
                 onClick={keluarkan}
                 disabled={menyimpan}
-                className="btn-primary flex-1 justify-center bg-red-600 hover:bg-red-700"
+                className="btn-danger flex-1 justify-center"
               >
                 {menyimpan && <Loader2 className="w-4 h-4 animate-spin" />} Keluarkan
               </button>

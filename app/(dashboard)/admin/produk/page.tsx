@@ -77,7 +77,7 @@ function Isi() {
   useEffect(() => { muat(); }, [muat]);
 
   return (
-    <div className="max-w-5xl space-y-5">
+    <div className="shell">
       <div>
         <h1 className="page-title">Master Produk</h1>
         <p className="page-sub">

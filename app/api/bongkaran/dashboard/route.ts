@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { handle, requireBongkaran } from "@/lib/api";
 import { todayWIB, shiftDays } from "@/lib/date";
-import { KONDISI, type Kondisi } from "@/lib/bongkaran";
+import { KONDISI, KAMERA, type Kondisi } from "@/lib/bongkaran";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
       draft,
       barcodeAsing,
       waktuMeragukan,
+      perKamera,
     ] = await Promise.all([
       prisma.bongkaran.count({ where: { date: tanggal, status: "final" } }),
 
@@ -94,6 +95,16 @@ export async function GET(req: NextRequest) {
 
       prisma.bongkaran.count({
         where: { waktuDariKlien: true, status: "final", date: { gte: mulai, lte: tanggal } },
+      }),
+
+      // Sebaran per kamera hari ini. Gunanya bukan sekadar hiasan: kalau
+      // tiga meja berjalan tapi seluruh resi tercatat di Kamera 1, berarti
+      // ada operator yang salah pilih di awal — dan itu baru akan terasa
+      // berbulan-bulan kemudian, saat rekamannya dicari dan tidak ada.
+      prisma.bongkaran.groupBy({
+        by: ["kamera"],
+        where: { date: tanggal, status: "final" },
+        _count: { _all: true },
       }),
     ]);
 
@@ -155,6 +166,18 @@ export async function GET(req: NextRequest) {
         namaDitulis: b._max.namaProduk ?? "",
       })),
       waktuMeragukan,
+      kamera: [
+        ...KAMERA.map((k) => ({
+          kamera: k as number | null,
+          resi: perKamera.find((p) => p.kamera === k)?._count._all ?? 0,
+        })),
+        // Baris lama tidak punya nomor kamera (kolomnya baru ditambahkan).
+        // Ditampilkan terpisah, bukan dilebur ke salah satu kamera.
+        {
+          kamera: null,
+          resi: perKamera.find((p) => p.kamera === null)?._count._all ?? 0,
+        },
+      ].filter((k) => k.resi > 0 || k.kamera !== null),
     };
   });
 }

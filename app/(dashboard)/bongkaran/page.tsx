@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { mintaJson, pesanError } from "@/lib/http";
 import {
   KONDISI, LABEL_KONDISI, butuhBarcode, bacaBatch, periksaItem,
-  type Kondisi, type ItemMasuk,
+  KAMERA, type NomorKamera, type Kondisi, type ItemMasuk,
 } from "@/lib/bongkaran";
 import {
   sinkron, cariBarcode, saranBatch, isiCache, catatBatchLokal,
@@ -16,7 +16,7 @@ import {
 import { bersihkanKode } from "@/lib/produk";
 import {
   PackageOpen, Loader2, AlertCircle, CheckCircle2, X, Plus, Trash2,
-  RefreshCw, ScanLine, Clock, WifiOff, Info, ChevronDown,
+  RefreshCw, ScanLine, Clock, WifiOff, Info, ChevronDown, Video, Repeat2,
 } from "lucide-react";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -244,6 +244,19 @@ function Isi() {
     }
   };
 
+  /**
+   * Kamera CCTV yang mengawasi meja bongkar untuk kunjungan ini.
+   *
+   * SENGAJA state komponen biasa — bukan sessionStorage, bukan cookie.
+   * Nilainya hidup selama halaman ini terbuka dan hilang begitu operator
+   * pindah menu, yang persis aturannya: keluar dari Bongkaran berarti
+   * memilih kamera lagi. Menyimpannya di sessionStorage justru akan
+   * bertahan melewati perpindahan menu, dan operator yang pindah meja
+   * pukul dua siang akan terus mencatat kamera meja paginya tanpa satu
+   * pun tanda di layar.
+   */
+  const [kamera, setKamera] = useState<NomorKamera | null>(null);
+
   // ── Sesi scan ─────────────────────────────────────────────────────────
   const [resi, setResi] = useState("");
   const [sesi, setSesi] = useState<Sesi | null>(null);
@@ -276,7 +289,8 @@ function Isi() {
       const d = await mintaJson<{
         id: string; noResi: string; scannedAt: string;
         duplikat: Sesi["duplikat"]; retur: Sesi["retur"];
-      }>("/api/bongkaran/mulai", { method: "POST", body: { noResi: kode }, timeoutMs: 15_000 });
+      }>("/api/bongkaran/mulai",
+        { method: "POST", body: { noResi: kode, kamera }, timeoutMs: 15_000 });
 
       // t0 disetel ULANG di sini, bukan dipakai apa adanya dari sebelum
       // permintaan: server menulis `scannedAt` saat permintaan TIBA, jadi
@@ -373,6 +387,7 @@ function Isi() {
                 noResi: sesi.noResi,
                 scannedAtKlien: sesi.scannedAt,
                 klienKunci: sesi.klienKunci,
+                kamera,
                 items: muatan,
               },
         }
@@ -402,7 +417,7 @@ function Isi() {
   /* ────────────────────────────────────────────────────────────────────── */
 
   return (
-    <div className="max-w-2xl space-y-4 pb-28">
+    <div className="shell-form pb-28">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Scan Bongkaran</h1>
@@ -468,6 +483,62 @@ function Isi() {
       {error && <Kotak jenis="error" pesan={error} onTutup={() => setError("")} />}
       {info && <Kotak jenis="info" pesan={info} onTutup={() => setInfo("")} />}
 
+      {/*
+        GERBANG KAMERA — tidak ada yang bisa di-scan sebelum kamera dipilih.
+        Dibuat sebagai layar penuh, bukan sebagai kolom tambahan di form,
+        supaya tidak mungkin terlewat: nomor kamera yang kosong baru akan
+        terasa akibatnya berbulan-bulan kemudian, ketika seseorang justru
+        sedang mencari rekaman untuk satu baris yang dipertanyakan.
+      */}
+      {kamera === null ? (
+        <div className="card p-6 sm:p-8">
+          <div className="flex items-center gap-2.5 mb-1">
+            <Video className="w-5 h-5 text-brand-600" />
+            <h2 className="font-semibold text-heading">Pilih kamera meja bongkar</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-5">
+            Nomor kamera disimpan bersama setiap resi, supaya jam scan bisa
+            dicocokkan dengan rekaman CCTV. Pilihan ini berlaku selama Anda
+            berada di menu Bongkaran; begitu pindah menu, kamera dipilih lagi.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {KAMERA.map((k) => (
+              <button
+                key={k}
+                onClick={() => setKamera(k)}
+                className="flex flex-col items-center justify-center gap-2 py-6 rounded-card
+                           border border-gray-300 bg-white text-ink
+                           hover:border-brand-600 hover:bg-brand-50 hover:text-brand-700
+                           active:scale-[.98] transition-all"
+              >
+                <Video className="w-6 h-6" />
+                <span className="text-base font-semibold">Kamera {k}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+      <>
+      {/* Penanda kamera aktif — selalu terlihat, dan bisa diganti selama
+          belum ada resi yang sedang dibuka. */}
+      <div className="flex items-center gap-2 text-sm">
+        <span className="badge-info inline-flex items-center gap-1.5">
+          <Video className="w-3 h-3" /> Kamera {kamera}
+        </span>
+        <button
+          onClick={() => setKamera(null)}
+          disabled={!!sesi}
+          className="btn-ghost text-xs disabled:opacity-30"
+          title={
+            sesi
+              ? "Selesaikan atau batalkan resi yang sedang dibuka dulu"
+              : "Ganti kamera"
+          }
+        >
+          <Repeat2 className="w-3.5 h-3.5" /> Ganti
+        </button>
+      </div>
+
       {/* ── Langkah 1: resi ── */}
       {!sesi ? (
         <div className="card p-5 space-y-3">
@@ -522,7 +593,7 @@ function Isi() {
           {/* Bilah simpan — menempel di bawah supaya selalu terjangkau ibu
               jari di layar PDT yang sempit. */}
           <div className="fixed bottom-0 left-0 right-0 lg:left-sidebar bg-white/95 backdrop-blur border-t border-brand-600/10 p-3 z-20">
-            <div className="max-w-2xl mx-auto space-y-2">
+            <div className="max-w-3xl mx-auto space-y-2">
               {masalahPertama && (
                 <p className="text-xs text-amber-700 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {masalahPertama}
@@ -539,6 +610,8 @@ function Isi() {
             </div>
           </div>
         </>
+      )}
+      </>
       )}
     </div>
   );
@@ -756,39 +829,6 @@ function KartuBarang({
         )}
       </div>
 
-      {/* ── Kondisi: baris PERTAMA, aktif sejak kartu muncul ── */}
-      <div>
-        <label className="text-xs font-medium text-gray-600 mb-1.5 block">
-          Kondisi <span className="text-gray-400 font-normal">· Alt+1…4</span>
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          {KONDISI.map((k, i) => {
-            const aktif = item.kondisi === k;
-            return (
-              <button
-                key={k}
-                type="button"
-                onClick={() => pilihKondisi(k)}
-                className={cn(
-                  "px-3 py-2.5 rounded-lg text-sm font-medium border transition-colors text-left",
-                  // Kondisi yang terpilih memakai warna STATUS-nya sendiri,
-                  // bukan warna aksi. Ini satu-satunya tempat di aplikasi
-                  // yang begitu, dan alasannya: yang sedang dipilih di sini
-                  // BUKAN sebuah tindakan, melainkan nilai status yang akan
-                  // tersimpan. Operator yang menoleh sebentar harus bisa
-                  // membaca "merah" sebagai rusak total tanpa mengeja
-                  // tulisannya.
-                  aktif ? WARNA_KONDISI[k] : "bg-white border-gray-300 text-ink hover:border-brand-400"
-                )}
-              >
-                <span className="text-[10px] opacity-60 mr-1">{i + 1}</span>
-                {LABEL_KONDISI[k]}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/*
         BERDAMPINGAN MULAI 640 px (`sm:`), BERTUMPUK DI BAWAH ITU.
 
@@ -901,6 +941,51 @@ function KartuBarang({
           </p>
         </>
       )}
+
+      {/*
+        ── Kondisi ──
+        Ditempatkan SESUDAH barcode karena begitulah urutan kerjanya: barang
+        di-scan dulu, baru dinilai kondisinya. Menaruh kondisi di atas
+        memaksa operator menilai sesuatu yang belum ia lihat namanya.
+
+        Yang TIDAK berubah: kondisi tetap hidup sejak kartu muncul dan tidak
+        pernah menunggu barcode. Operator yang membuka kardus dan langsung
+        tahu isinya salah boleh menekan "Isi Salah" lebih dulu — kolom
+        barcode di atas akan hilang dengan sendirinya. Yang diubah hanya
+        urutan tampilannya, bukan aturannya.
+      */}
+      <div>
+        <label className="text-xs font-medium text-gray-600 mb-1.5 block">
+          Kondisi <span className="text-gray-400 font-normal">· Alt+1…4</span>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {KONDISI.map((k, i) => {
+            const aktif = item.kondisi === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => pilihKondisi(k)}
+                className={cn(
+                  "px-3 py-2.5 rounded-lg text-sm font-medium border transition-colors text-left",
+                  // Kondisi yang terpilih memakai warna STATUS-nya sendiri,
+                  // bukan warna aksi. Ini satu-satunya tempat di aplikasi
+                  // yang begitu, dan alasannya: yang sedang dipilih di sini
+                  // BUKAN sebuah tindakan, melainkan nilai status yang akan
+                  // tersimpan. Operator yang menoleh sebentar harus bisa
+                  // membaca "merah" sebagai rusak total tanpa mengeja
+                  // tulisannya.
+                  aktif ? WARNA_KONDISI[k] : "bg-white border-gray-300 text-ink hover:border-brand-400"
+                )}
+              >
+                <span className="text-[10px] opacity-60 mr-1">{i + 1}</span>
+                {LABEL_KONDISI[k]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
 
       {/*
         Batch di KIRI, Exp. Date di KANAN — arah baca yang sama dengan arah

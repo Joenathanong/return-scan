@@ -253,7 +253,7 @@ export default function DataPage() {
   };
 
   return (
-    <div className="max-w-6xl space-y-5">
+    <div className="shell">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Data &amp; Export</h1>

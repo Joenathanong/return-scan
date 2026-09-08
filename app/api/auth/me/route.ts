@@ -25,7 +25,7 @@ export async function GET() {
     select: {
       id: true, email: true, name: true, role: true,
       active: true, mustChangePassword: true,
-      sesiAktif: true, bisaBongkaran: true,
+      sesiAktif: true, bisaBongkaran: true, bisaCancelOrder: true,
     },
   });
 
@@ -53,6 +53,7 @@ export async function GET() {
     role: (isAdmin ? "admin" : "operator") as UserRole,
     mustChangePassword: user.mustChangePassword,
     bisaBongkaran: isAdmin || user.bisaBongkaran,
+    bisaCancelOrder: isAdmin || user.bisaCancelOrder,
   };
   return NextResponse.json({ user: out });
 }

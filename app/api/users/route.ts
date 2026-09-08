@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  */
 const toUser = (u: {
   id: string; email: string; name: string; role: string; active: boolean;
-  mustChangePassword: boolean; bisaBongkaran: boolean;
+  mustChangePassword: boolean; bisaBongkaran: boolean; bisaCancelOrder: boolean;
   sesiAktif: string | null; perangkatLabel: string | null; sesiSejak: Date | null;
   createdAt: Date; lastLogin: Date | null;
 }): AppUser => ({
@@ -27,6 +27,7 @@ const toUser = (u: {
   active: u.active,
   mustChangePassword: u.mustChangePassword,
   bisaBongkaran: u.bisaBongkaran,
+  bisaCancelOrder: u.bisaCancelOrder,
   sedangLogin: Boolean(u.sesiAktif),
   perangkatLabel: u.perangkatLabel,
   sesiSejak: u.sesiSejak?.toISOString() ?? null,
@@ -36,7 +37,8 @@ const toUser = (u: {
 
 const PILIH = {
   id: true, email: true, name: true, role: true,
-  active: true, mustChangePassword: true, bisaBongkaran: true,
+  active: true, mustChangePassword: true,
+  bisaBongkaran: true, bisaCancelOrder: true,
   sesiAktif: true, perangkatLabel: true, sesiSejak: true,
   createdAt: true, lastLogin: true,
 } as const;
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
     const me = await requireAdmin();
     const body = (await req.json()) as {
       email?: string; name?: string; role?: string; password?: string;
-      bisaBongkaran?: boolean;
+      bisaBongkaran?: boolean; bisaCancelOrder?: boolean;
     };
 
     const email = requireString(body.email, "Email", 191).toLowerCase();
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
           passwordHash: hashPassword(password),
           mustChangePassword: true,
           bisaBongkaran: Boolean(body.bisaBongkaran),
+          bisaCancelOrder: Boolean(body.bisaCancelOrder),
           createdBy: me.id,
         },
         select: PILIH,

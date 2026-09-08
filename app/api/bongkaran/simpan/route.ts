@@ -5,7 +5,7 @@ import {
 } from "@/lib/api";
 import { todayWIB } from "@/lib/date";
 import {
-  periksaItem, isKondisi, butuhBarcode, bacaBatch, type ItemMasuk,
+  periksaItem, isKondisi, butuhBarcode, bacaBatch, isKamera, type ItemMasuk,
 } from "@/lib/bongkaran";
 import { bersihkanKode, bersihkanNama } from "@/lib/produk";
 
@@ -27,6 +27,8 @@ interface Badan {
   scannedAtKlien?: string;
   /** Kunci idempoten jalur luring — lihat catatan di schema.prisma. */
   klienKunci?: string;
+  /** Nomor kamera CCTV, hanya dipakai di jalur luring. */
+  kamera?: number;
   items?: ItemMasuk[];
 }
 
@@ -106,6 +108,12 @@ export async function POST(req: NextRequest) {
 
       const klienKunci = String(body.klienKunci ?? "").trim().slice(0, 64) || null;
 
+      // Jalur luring tidak lewat /mulai, jadi kameranya ikut di sini.
+      const kameraLuring = Number(body.kamera);
+      if (!isKamera(kameraLuring)) {
+        throw badRequest("Nomor kamera belum dipilih. Pilih kamera dulu di layar Bongkaran.");
+      }
+
       // Kiriman ulang setelah balasan hilang di jaringan: kembalikan hasil
       // yang SUDAH tersimpan, jangan buat resi kedua. Tanpa ini, duplikatnya
       // terlihat persis seperti koli kedua yang sah dan tidak ada cara
@@ -138,6 +146,7 @@ export async function POST(req: NextRequest) {
             scannedAt: jam,
             waktuDariKlien: true,
             klienKunci,
+            kamera: kameraLuring,
             scannedById: me.id,
             // Tanggal bisnis tetap dihitung SERVER dari jam server, bukan dari
             // jam klien: kalau tidak, PDT yang tanggalnya salah akan

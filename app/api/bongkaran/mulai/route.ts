@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { handle, requireBongkaran, cleanResi, badRequest } from "@/lib/api";
 import { todayWIB } from "@/lib/date";
+import { isKamera } from "@/lib/bongkaran";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,10 +32,23 @@ export async function POST(req: NextRequest) {
   return handle(async () => {
     const me = await requireBongkaran();
 
-    const body = (await req.json()) as { noResi?: string };
+    const body = (await req.json()) as { noResi?: string; kamera?: number };
     const noResi = cleanResi(body.noResi);
     if (!noResi) throw badRequest("Nomor resi wajib diisi.");
     if (noResi.length > 64) throw badRequest("Nomor resi terlalu panjang.");
+
+    // Kamera WAJIB di sini, walaupun kolomnya nullable di database.
+    //
+    // Nullable itu untuk baris lama yang tercatat sebelum fitur ini ada;
+    // baris baru tidak punya alasan untuk kosong, karena layar memaksa
+    // memilih kamera sebelum kolom resi bisa disentuh. Kalau tetap sampai
+    // ke sini tanpa kamera, ada yang salah — dan lebih baik ketahuan
+    // sekarang daripada muncul sebagai kolom kosong berbulan-bulan
+    // kemudian, saat seseorang justru sedang mencari rekamannya.
+    const kamera = Number(body.kamera);
+    if (!isKamera(kamera)) {
+      throw badRequest("Nomor kamera belum dipilih. Pilih kamera dulu di layar Bongkaran.");
+    }
 
     const [sebelumnya, diScanRetur] = await Promise.all([
       prisma.bongkaran.findFirst({
@@ -61,11 +75,12 @@ export async function POST(req: NextRequest) {
       data: {
         noResi,
         scannedAt,
+        kamera,
         scannedById: me.id,
         date: todayWIB(),
         status: "draft",
       },
-      select: { id: true, noResi: true, scannedAt: true, date: true },
+      select: { id: true, noResi: true, scannedAt: true, date: true, kamera: true },
     });
 
     return {
@@ -73,6 +88,7 @@ export async function POST(req: NextRequest) {
       noResi: bongkaran.noResi,
       scannedAt: bongkaran.scannedAt.toISOString(),
       date: bongkaran.date,
+      kamera: bongkaran.kamera,
       duplikat: sebelumnya
         ? {
             tanggal: sebelumnya.date,

@@ -5,16 +5,29 @@ import AuthGuard from "@/components/AuthGuard";
 import { cn } from "@/lib/utils";
 import { mintaJson, pesanError } from "@/lib/http";
 import {
-   Loader2, AlertCircle, CheckCircle2, X, Download,
+  Loader2, AlertCircle, CheckCircle2, X, Download, Pencil, Save,
 } from "lucide-react";
+import {
+  KONDISI, LABEL_KONDISI, butuhBarcode, bacaBatch, isKondisi, type Kondisi,
+} from "@/lib/bongkaran";
+import { bersihkanKode } from "@/lib/produk";
 
 interface Baris {
+  /** Id baris — dipakai dialog koreksi untuk menyunting di tempat. */
+  id: string;
   noResi: string;
+  /** Posisi barang di dalam resinya. */
+  urutan: number;
+  totalBaris: number;
   barcode: string;
   sku: string;
   namaSku: string;
   qty: number;
   kondisi: string;
+  /** Kode mentah kondisi — dialog butuh nilai yang bisa dikirim balik,
+      bukan labelnya. */
+  kondisiKode: string;
+  edOtomatis: boolean;
   namaDiterima: string;
   batch: string;
   edDate: string;
@@ -22,8 +35,21 @@ interface Baris {
   scanDate: string;
   tanggal: string;
   produkTidakDikenal: boolean;
+  /** Nomor kamera CCTV saat resi dibongkar. Null untuk data lama. */
+  kamera: number | null;
   /** Dicocokkan dari Scan Retur lewat nomor resi. Kosong = belum ada di sana. */
   expedisi: string;
+}
+
+/**
+ * "1 of 2" — posisi barang di dalam resinya.
+ *
+ * Resi berisi satu barang tetap ditulis "1 of 1", bukan dikosongkan:
+ * kolom yang kadang kosong dan kadang terisi memaksa pembacanya menebak
+ * apakah kosong itu berarti "satu-satunya" atau "datanya hilang".
+ */
+function line(urutan: number, total: number): string {
+  return `${urutan} of ${total}`;
 }
 
 interface Balasan {
@@ -77,6 +103,7 @@ function Isi() {
   const [maju, setMaju] = useState(0);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [sunting, setSunting] = useState<Baris | null>(null);
 
   const ambil = async () => {
     setMemuat(true);
@@ -122,6 +149,7 @@ function Isi() {
       const data = rows.map((r, i) => ({
         "No.": i + 1,
         "No Resi": r.noResi,
+        "Line": line(r.urutan, r.totalBaris),
         "Barcode Scan": r.barcode || "—",
         "Kode SKU": r.sku || "—",
         "Nama SKU": r.namaSku || "—",
@@ -132,6 +160,10 @@ function Isi() {
         "Exp. Date": tanggalExcel(r.edDate),
         "Scan By": r.scanBy,
         "Scan Date": waktuExcel(r.scanDate),
+        // Kamera berpasangan dengan Scan Date: yang satu menjawab "kamera
+        // mana", yang lain "jam berapa". Baris lama — dari sebelum fitur
+        // kamera ada — ditulis "—", bukan diisi tebakan.
+        "Kamera": r.kamera ? `Kamera ${r.kamera}` : "—",
         // Kolom terakhir, sesuai permintaan. Kosong ditulis "—" seperti
         // kolom lain yang tidak terisi, supaya sel kosong di Excel selalu
         // berarti "belum diisi" dan bukan "tidak ada padanannya".
@@ -140,9 +172,9 @@ function Isi() {
 
       const ws = XLSX.utils.json_to_sheet(data);
       ws["!cols"] = [
-        { wch: 5 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 34 },
-        { wch: 9 }, { wch: 15 }, { wch: 26 }, { wch: 12 }, { wch: 12 },
-        { wch: 18 }, { wch: 20 }, { wch: 18 },
+        { wch: 5 }, { wch: 20 }, { wch: 8 }, { wch: 18 }, { wch: 14 },
+        { wch: 34 }, { wch: 9 }, { wch: 15 }, { wch: 26 }, { wch: 12 },
+        { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 11 }, { wch: 18 },
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Bongkaran");
@@ -163,12 +195,15 @@ function Isi() {
     : 0;
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="shell">
       <div>
         <h1 className="page-title">Export Bongkaran</h1>
         <p className="page-sub">
-          Satu baris per barang. Resi yang berisi dua barang muncul dua kali.
-          Kolom <strong>Expedisi</strong> dicocokkan dari Scan Retur lewat nomor resi.
+          Baris yang ganjil bisa diperbaiki lewat ikon pensil — waktu scan-nya
+          tidak ikut berubah. Kolom <strong>Line</strong> menunjukkan posisinya
+          di dalam resi (&ldquo;1 of 2&rdquo;). Kolom <strong>Kamera</strong>
+          berpasangan dengan Scan Date untuk mencari rekaman CCTV, dan{" "}
+          <strong>Expedisi</strong> dicocokkan dari Scan Retur lewat nomor resi.
         </p>
       </div>
 
@@ -228,18 +263,34 @@ function Isi() {
               <table className="w-full text-sm whitespace-nowrap">
                 <thead className="thead-ocs">
                   <tr>
-                    {["No.", "No Resi", "Barcode Scan", "Kode SKU", "Nama SKU", "Qty",
-                      "Kondisi", "Nama Barang Diterima", "Batch", "Exp. Date",
-                      "Scan By", "Scan Date", "Expedisi"].map((h) => (
+                    {["No.", "No Resi", "Line", "Barcode Scan", "Kode SKU", "Nama SKU",
+                      "Qty", "Kondisi", "Nama Barang Diterima", "Batch", "Exp. Date",
+                      "Scan By", "Scan Date", "Kamera", "Expedisi"].map((h) => (
                       <th key={h}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {rows.slice(0, 100).map((r, i) => (
-                    <tr key={i} className={cn(r.produkTidakDikenal && "bg-amber-50/60")}>
+                    <tr
+                      key={r.id}
+                      className={cn("row-hover", r.produkTidakDikenal && "bg-warn-bg/60")}
+                    >
+                      <td className="px-2 py-2">
+                        <button
+                          onClick={() => setSunting(r)}
+                          className="p-1.5 rounded text-gray-400 hover:text-brand-600 hover:bg-brand-50"
+                          title="Perbaiki baris ini"
+                          aria-label={`Perbaiki baris ${i + 1}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                       <td className="px-3 py-2 text-gray-400">{i + 1}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.noResi}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500 tabular-nums">
+                        {line(r.urutan, r.totalBaris)}
+                      </td>
                       <td className="px-3 py-2 font-mono text-xs">{r.barcode || "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.sku || "—"}</td>
                       <td className="px-3 py-2">{r.namaSku || "—"}</td>
@@ -250,6 +301,9 @@ function Isi() {
                       <td className="px-3 py-2">{tanggalExcel(r.edDate)}</td>
                       <td className="px-3 py-2">{r.scanBy}</td>
                       <td className="px-3 py-2 text-xs">{waktuExcel(r.scanDate)}</td>
+                      <td className={cn("px-3 py-2 text-xs", !r.kamera && "text-gray-300")}>
+                        {r.kamera ? `Kamera ${r.kamera}` : "—"}
+                      </td>
                       <td className={cn("px-3 py-2", !r.expedisi && "text-gray-300")}>
                         {r.expedisi || "—"}
                       </td>
@@ -267,6 +321,210 @@ function Isi() {
           </div>
         </>
       )}
+
+      {sunting && (
+        <DialogSunting
+          baris={sunting}
+          onTutup={() => setSunting(null)}
+          onSimpan={(baru, pesan) => {
+            // Baris diperbarui DI TEMPAT, tidak dengan memuat ulang seluruh
+            // laporan: rentang sebulan bisa puluhan ribu baris, dan
+            // menariknya lagi hanya untuk satu koreksi membuang waktu
+            // operator yang sedang membereskan sepuluh baris berturut-turut.
+            setRows((arr) => (arr ?? []).map((x) => (x.id === baru.id ? baru : x)));
+            setSunting(null);
+            setInfo(pesan);
+          }}
+          onError={setError}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Dialog koreksi satu baris
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function DialogSunting({
+  baris, onTutup, onSimpan, onError,
+}: {
+  baris: Baris;
+  onTutup: () => void;
+  onSimpan: (baru: Baris, pesan: string) => void;
+  onError: (pesan: string) => void;
+}) {
+  const awal: Kondisi = isKondisi(baris.kondisiKode) ? baris.kondisiKode : "BAGUS";
+
+  const [kondisi, setKondisi] = useState<Kondisi>(awal);
+  const [barcode, setBarcode] = useState(baris.barcode);
+  const [sku, setSku] = useState(baris.sku);
+  const [nama, setNama] = useState(baris.namaSku);
+  const [namaDiterima, setNamaDiterima] = useState(baris.namaDiterima);
+  const [qty, setQty] = useState(String(baris.qty));
+  const [batch, setBatch] = useState(baris.batch);
+  const [edDate, setEdDate] = useState(baris.edDate);
+  const [edOtomatis, setEdOtomatis] = useState(baris.edOtomatis);
+  const [menyimpan, setMenyimpan] = useState(false);
+
+  const perluBarcode = butuhBarcode(kondisi);
+
+  const ubahBatch = (v: string) => {
+    const b = bersihkanKode(v);
+    const terbaca = bacaBatch(b, hariIniWIB());
+    setBatch(b);
+    if (terbaca) {
+      setEdDate(terbaca.edDate);
+      setEdOtomatis(true);
+    } else {
+      setEdOtomatis(false);
+    }
+  };
+
+  const simpan = async () => {
+    setMenyimpan(true);
+    try {
+      await mintaJson(`/api/bongkaran/item/${baris.id}`, {
+        method: "PATCH",
+        body: {
+          kondisi,
+          barcode: perluBarcode ? barcode : "",
+          sku: perluBarcode ? sku : "",
+          namaProduk: perluBarcode ? nama : "",
+          namaDiterima: perluBarcode ? "" : namaDiterima,
+          qty: Number(qty),
+          batch,
+          edDate,
+          edOtomatis,
+        },
+      });
+
+      onSimpan(
+        {
+          ...baris,
+          kondisiKode: kondisi,
+          kondisi: LABEL_KONDISI[kondisi],
+          barcode: perluBarcode ? bersihkanKode(barcode) : "",
+          sku: perluBarcode ? bersihkanKode(sku) : "",
+          namaSku: perluBarcode ? nama : "",
+          namaDiterima: perluBarcode ? "" : namaDiterima,
+          qty: Number(qty),
+          batch: bersihkanKode(batch),
+          edDate,
+          edOtomatis,
+          produkTidakDikenal: perluBarcode && Boolean(barcode) && !sku,
+        },
+        `Baris ${baris.noResi} diperbarui.`
+      );
+    } catch (e) {
+      onError(pesanError(e, "Gagal menyimpan perubahan."));
+    } finally {
+      setMenyimpan(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-card shadow-modal p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto scroll-slim">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-heading">Perbaiki baris</h3>
+            <p className="text-sm text-gray-500 mt-0.5 font-mono truncate">
+              {baris.noResi} · {line(baris.urutan, baris.totalBaris)}
+            </p>
+          </div>
+          <button onClick={onTutup} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="bg-brand-50 border border-brand-200 rounded-xl px-3.5 py-2.5 text-xs text-brand-700">
+          Waktu scan <strong>tidak ikut berubah</strong> — ia tetap menunjuk saat
+          barang benar-benar di-scan ({waktuExcel(baris.scanDate)}
+          {baris.kamera ? `, Kamera ${baris.kamera}` : ""}), bukan saat perbaikan
+          ini. Rekaman CCTV pada jam itu tetap bisa dicari.
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 mb-1.5 block">Kondisi</label>
+          <div className="grid grid-cols-2 gap-2">
+            {KONDISI.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKondisi(k)}
+                className={cn(
+                  "px-3 py-2 rounded-lg text-sm font-medium border transition-colors text-left",
+                  kondisi === k
+                    ? "bg-brand-600 border-brand-600 text-white"
+                    : "bg-white border-gray-300 text-ink hover:border-brand-400"
+                )}
+              >
+                {LABEL_KONDISI[k]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {perluBarcode ? (
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Barcode</label>
+              <input value={barcode} onChange={(e) => setBarcode(e.target.value)}
+                     className="input-field font-mono" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Kode SKU</label>
+              <input value={sku} onChange={(e) => setSku(e.target.value)}
+                     className="input-field font-mono" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Nama produk</label>
+              <input value={nama} onChange={(e) => setNama(e.target.value)} className="input-field" />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1.5 block">
+              Nama Barang yang Diterima
+            </label>
+            <input value={namaDiterima} onChange={(e) => setNamaDiterima(e.target.value)}
+                   className="input-field" />
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1.5 block">Quantity</label>
+            <input value={qty} inputMode="numeric"
+                   onChange={(e) => setQty(e.target.value.replace(/[^0-9]/g, ""))}
+                   className="input-field text-center tabular-nums" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1.5 block">Batch</label>
+            <input value={batch} onChange={(e) => ubahBatch(e.target.value)}
+                   className="input-field font-mono" />
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <label className="text-xs font-medium text-gray-600 mb-1.5 block">
+              Exp. Date
+              {edOtomatis && <span className="ml-1.5 text-ok-strong font-normal">otomatis</span>}
+            </label>
+            <input type="date" value={edDate}
+                   onChange={(e) => { setEdDate(e.target.value); setEdOtomatis(false); }}
+                   className="input-field" />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={simpan} disabled={menyimpan}
+                  className="btn-primary flex-1 justify-center">
+            {menyimpan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Simpan perubahan
+          </button>
+          <button onClick={onTutup} className="btn-ghost">Batal</button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -117,7 +117,7 @@ function Isi() {
   };
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="shell-form">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Master Ekspedisi</h1>

@@ -46,6 +46,29 @@ export function butuhBarcode(kondisi: Kondisi): boolean {
   return kondisi !== "ISI_SALAH";
 }
 
+// ─── Kamera ──────────────────────────────────────────────────────────────────
+
+/**
+ * Kamera CCTV yang mengawasi meja bongkar.
+ *
+ * Angkanya tetap 1–4 dan sengaja ditulis di sini, bukan diambil dari tabel
+ * pengaturan: jumlah kamera di ruang bongkar adalah fakta fisik yang jarang
+ * berubah, dan tabel pengaturan hanya akan menambah satu kueri di jalur
+ * yang dilewati setiap operator setiap hari. Kalau kameranya bertambah,
+ * ubah satu baris ini.
+ */
+export const KAMERA = [1, 2, 3, 4] as const;
+export type NomorKamera = (typeof KAMERA)[number];
+
+export function isKamera(v: unknown): v is NomorKamera {
+  return typeof v === "number" && (KAMERA as readonly number[]).includes(v);
+}
+
+/** Label yang dipakai di layar dan di ekspor. */
+export function labelKamera(v: number | null | undefined): string {
+  return isKamera(v) ? `Kamera ${v}` : "";
+}
+
 // ─── Batch → tanggal produksi → ED ───────────────────────────────────────────
 
 /** Umur simpan tetap: 3 tahun, selalu jatuh di tanggal 1. */

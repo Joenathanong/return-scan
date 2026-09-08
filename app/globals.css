@@ -218,6 +218,26 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* ── Lebar halaman ───────────────────────────────────────────────────────
+     Dua kerangka, dan pemilihannya bukan selera:
+
+     `.shell`        — halaman padat data (tabel, dashboard). Memakai
+                       seluruh lebar layar sampai 1600px. Tabel dua belas
+                       kolom yang diperas ke 896px memaksa gulir mendatar
+                       terus-menerus, padahal layarnya kosong separuh.
+
+     `.shell-form`   — halaman isian dan scan. TETAP sempit, dan itu
+                       disengaja: baris teks sepanjang 1600px tidak bisa
+                       dibaca, dan kolom isian selebar itu membuat mata
+                       berpindah jauh antara label dan nilainya.
+     ───────────────────────────────────────────────────────────────────── */
+  .shell {
+    @apply w-full max-w-[1600px] space-y-5;
+  }
+  .shell-form {
+    @apply w-full max-w-3xl space-y-5;
+  }
+
   /* ── Bilah aksen kecil, dipakai di depan judul kartu/topbar ───────────── */
   .accent-bar {
     @apply w-[3px] h-4 rounded-sm flex-shrink-0;

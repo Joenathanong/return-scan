@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, ScanLine, History, Printer, Table2,
   Package, Users, Truck, Settings, LogOut, X, KeyRound, Boxes,
-  PackageOpen, FileSpreadsheet, LayoutList,
+  PackageOpen, FileSpreadsheet, LayoutList, XCircle, ClipboardList,
 } from "lucide-react";
 
 interface NavItem {
@@ -26,6 +26,8 @@ interface NavGroup {
    * requireBongkaran(), jadi menyembunyikan menu bukan pengamanannya.
    */
   bongkaranOnly?: boolean;
+  /** Grup yang butuh izin modul Cancel Order. Admin selalu lolos. */
+  cancelOrderOnly?: boolean;
   items: NavItem[];
 }
 
@@ -55,6 +57,14 @@ const GRUP: NavGroup[] = [
       { href: "/bongkaran",           label: "Scan Bongkaran", icon: <PackageOpen     className="w-[18px] h-[18px]" /> },
       { href: "/bongkaran/dashboard", label: "Monitoring",     icon: <LayoutList      className="w-[18px] h-[18px]" /> },
       { href: "/bongkaran/export",    label: "Export",         icon: <FileSpreadsheet className="w-[18px] h-[18px]" /> },
+    ],
+  },
+  {
+    judul: "Cancel Order",
+    cancelOrderOnly: true,
+    items: [
+      { href: "/cancel-order",         label: "Scan Cancel Order", icon: <XCircle       className="w-[18px] h-[18px]" /> },
+      { href: "/cancel-order/riwayat", label: "Riwayat & Export",  icon: <ClipboardList className="w-[18px] h-[18px]" /> },
     ],
   },
   {
@@ -94,13 +104,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { appUser, signOut } = useAuth();
   const isAdmin = appUser?.role === "admin";
   const bisaBongkaran = isAdmin || appUser?.bisaBongkaran === true;
+  const bisaCancelOrder = isAdmin || appUser?.bisaCancelOrder === true;
 
   /**
    * `startsWith` membuat menu induk ikut menyala di halaman anaknya —
    * "Scan Bongkaran" akan tersorot padahal yang dibuka /bongkaran/export.
    * Menu yang punya anak dicocokkan persis.
    */
-  const PUNYA_ANAK = ["/dashboard", "/bongkaran"];
+  const PUNYA_ANAK = ["/dashboard", "/bongkaran", "/cancel-order"];
   const isActive = (href: string) =>
     PUNYA_ANAK.includes(href) ? pathname === href : pathname.startsWith(href);
 
@@ -141,7 +152,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         {/* ── Menu ── */}
         <nav className="flex-1 overflow-y-auto scroll-slim-dark px-3 py-3">
           {GRUP.filter(
-            (g) => (!g.adminOnly || isAdmin) && (!g.bongkaranOnly || bisaBongkaran)
+            (g) =>
+              (!g.adminOnly || isAdmin) &&
+              (!g.bongkaranOnly || bisaBongkaran) &&
+              (!g.cancelOrderOnly || bisaCancelOrder)
           ).map((grup, gi) => (
             <div key={grup.judul ?? `grup-${gi}`} className={gi > 0 ? "mt-5" : ""}>
               {grup.judul && (
