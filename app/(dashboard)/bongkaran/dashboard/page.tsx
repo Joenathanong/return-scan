@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
 import { mintaJson, pesanError } from "@/lib/http";
 import { LABEL_KONDISI, type Kondisi } from "@/lib/bongkaran";
 import {
-   Loader2, AlertCircle, CheckCircle2, X, PackageOpen,
+  Loader2, AlertCircle, CheckCircle2, X, PackageOpen,
   Barcode, Clock, Trash2, RefreshCw, FileSpreadsheet, Video, Wand2,
+  Eye, Save, ChevronRight,
 } from "lucide-react";
 
 interface Data {
@@ -22,6 +23,29 @@ interface Data {
   barcodeAsing: { barcode: string; jumlah: number; namaDitulis: string }[];
   waktuMeragukan: number;
   kamera: { kamera: number | null; resi: number }[];
+}
+
+/** Isi satu draft, dari GET /api/bongkaran/[id]. */
+interface IsiDraft {
+  id: string;
+  noResi: string;
+  scannedAt: string;
+  date: string;
+  status: string;
+  waktuDariKlien: boolean;
+  scannedByName: string;
+  items: {
+    id: string;
+    urutan: number;
+    kondisi: string;
+    barcode: string | null;
+    sku: string | null;
+    namaProduk: string | null;
+    namaDiterima: string | null;
+    qty: number;
+    batch: string | null;
+    edDate: string | null;
+  }[];
 }
 
 /**
@@ -124,6 +148,48 @@ function Isi() {
       setError(pesanError(e, "Gagal mencocokkan barcode."));
     } finally {
       setMencocokkan(false);
+    }
+  };
+
+  /**
+   * Draft yang sedang diperiksa isinya. `null` = dialog tertutup.
+   *
+   * Isinya ditarik SAAT tombol ditekan, bukan diikutkan di balasan
+   * dashboard: daftar draft bisa memuat lima puluh baris, dan menarik
+   * seluruh barang untuk semuanya hanya demi satu yang mungkin dibuka
+   * adalah kerja yang hampir pasti terbuang.
+   */
+  const [periksa, setPeriksa] = useState<IsiDraft | null>(null);
+  const [memuatIsi, setMemuatIsi] = useState<string | null>(null);
+  const [memproses, setMemproses] = useState(false);
+
+  const lihatIsi = async (id: string) => {
+    setMemuatIsi(id);
+    setError("");
+    try {
+      setPeriksa(await mintaJson<IsiDraft>(`/api/bongkaran/${id}`));
+    } catch (e) {
+      setError(pesanError(e, "Gagal membuka isi draft."));
+    } finally {
+      setMemuatIsi(null);
+    }
+  };
+
+  const finalkan = async (x: IsiDraft) => {
+    setMemproses(true);
+    setError("");
+    try {
+      const r = await mintaJson<{ jumlahBarang: number }>(
+        `/api/bongkaran/${x.id}/finalkan`,
+        { method: "POST", body: {} }
+      );
+      setInfo(`${x.noResi} disimpan — ${r.jumlahBarang} barang masuk ke laporan.`);
+      setPeriksa(null);
+      muat();
+    } catch (e) {
+      setError(pesanError(e, "Gagal menyimpan draft."));
+    } finally {
+      setMemproses(false);
     }
   };
 
@@ -264,7 +330,12 @@ function Isi() {
           <div className="grid lg:grid-cols-2 gap-5 items-start">
           {/* ── Operator ── */}
           <div className="card">
-            <p className="font-semibold text-heading text-sm p-4 pb-2">Per operator</p>
+            <div className="p-4 pb-2 flex items-center justify-between gap-3">
+              <p className="font-semibold text-heading text-sm">Per operator</p>
+              <Link href="/bongkaran/operator" className="btn-ghost text-xs">
+                Lihat detail <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
             {d.operator.length === 0 ? (
               <p className="text-sm text-gray-400 px-4 pb-4">Belum ada input hari ini.</p>
             ) : (
@@ -295,7 +366,10 @@ function Isi() {
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
                 Resi yang sudah di-scan tapi belum pernah disimpan — biasanya PDT mati
-                atau operator keluar di tengah jalan. Isinya kosong, jadi aman dibuang.
+                atau operator keluar di tengah jalan. Barang dan status ditulis dalam
+                satu transaksi, jadi draft <em>seharusnya</em> selalu kosong. Tekan{" "}
+                <strong>Lihat isi</strong> untuk memastikan sendiri; kalau ternyata
+                berisi, ia bisa disimpan, bukan dibuang.
               </p>
             </div>
             {d.draft.length === 0 ? (
@@ -310,12 +384,24 @@ function Isi() {
                         {x.tanggal} {jamWIB(x.scannedAt)} · {x.oleh}
                       </p>
                     </div>
-                    <button
-                      onClick={() => buangDraft(x.id, x.noResi)}
-                      className="btn-ghost text-xs text-red-600 hover:bg-red-50 flex-shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Buang
-                    </button>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => lihatIsi(x.id)}
+                        disabled={memuatIsi === x.id}
+                        className="btn-ghost text-xs"
+                      >
+                        {memuatIsi === x.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Eye className="w-3.5 h-3.5" />}
+                        Lihat isi
+                      </button>
+                      <button
+                        onClick={() => buangDraft(x.id, x.noResi)}
+                        className="btn-ghost text-xs text-bad hover:bg-bad-bg"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Buang
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -386,6 +472,124 @@ function Isi() {
           )}
         </>
       ) : null}
+
+      {periksa && (
+        <DialogIsiDraft
+          draft={periksa}
+          memproses={memproses}
+          onTutup={() => setPeriksa(null)}
+          onSimpan={() => finalkan(periksa)}
+          onBuang={() => {
+            setPeriksa(null);
+            buangDraft(periksa.id, periksa.noResi);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Dialog: isi sebuah draft
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function DialogIsiDraft({
+  draft, memproses, onTutup, onSimpan, onBuang,
+}: {
+  draft: IsiDraft;
+  memproses: boolean;
+  onTutup: () => void;
+  onSimpan: () => void;
+  onBuang: () => void;
+}) {
+  const kosong = draft.items.length === 0;
+
+  return (
+    <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-card shadow-modal p-6 w-full max-w-2xl space-y-4 max-h-[90vh] overflow-y-auto scroll-slim">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-heading">Isi draft</h3>
+            <p className="text-sm text-gray-500 mt-0.5">
+              <span className="font-mono">{draft.noResi}</span> · {draft.date}{" "}
+              {jamWIB(draft.scannedAt)} · {draft.scannedByName}
+            </p>
+          </div>
+          <button onClick={onTutup} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {kosong ? (
+          <div className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-6 text-center space-y-1.5">
+            <p className="font-medium text-heading">Benar-benar kosong</p>
+            <p className="text-sm text-gray-500 max-w-md mx-auto">
+              Tidak ada satu pun barang di draft ini. Yang tersimpan hanya nomor
+              resi dan jam scan-nya. Tidak ada yang bisa diselamatkan — kalau
+              barangnya masih ada, scan ulang resinya di layar Bongkaran.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="bg-warn-bg border border-warn/30 rounded-xl px-4 py-3 text-sm text-warn">
+              Draft ini <strong>berisi {draft.items.length} barang</strong> — di luar
+              dugaan, karena barang dan status semestinya tersimpan bersamaan.
+              Jangan dibuang: simpan saja, datanya sah dan waktunya tetap menunjuk
+              saat resi ini di-scan.
+            </div>
+
+            <div className="overflow-x-auto scroll-slim border border-gray-300 rounded-xl">
+              <table className="w-full text-sm">
+                <thead className="thead-ocs">
+                  <tr>
+                    <th className="num">#</th>
+                    <th>Kondisi</th>
+                    <th>Barcode</th>
+                    <th>Nama</th>
+                    <th className="num">Qty</th>
+                    <th>Batch</th>
+                    <th>ED</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {draft.items.map((i) => (
+                    <tr key={i.id} className="row-hover">
+                      <td className="px-4 py-2 num tabular-nums text-gray-400">{i.urutan}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">
+                        {LABEL_KONDISI[i.kondisi as Kondisi] ?? i.kondisi}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs">{i.barcode || "—"}</td>
+                      <td className="px-4 py-2">
+                        {i.namaProduk || i.namaDiterima || "—"}
+                      </td>
+                      <td className="px-4 py-2 num tabular-nums">{i.qty}</td>
+                      <td className="px-4 py-2 font-mono text-xs">{i.batch || "—"}</td>
+                      <td className="px-4 py-2 text-xs">{i.edDate || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          {!kosong && (
+            <button onClick={onSimpan} disabled={memproses} className="btn-primary flex-1 justify-center">
+              {memproses ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Simpan {draft.items.length} barang ini
+            </button>
+          )}
+          <button
+            onClick={onBuang}
+            disabled={memproses}
+            className={cn("btn-ghost text-bad hover:bg-bad-bg", kosong && "flex-1 justify-center")}
+          >
+            <Trash2 className="w-4 h-4" /> Buang draft
+          </button>
+          <button onClick={onTutup} className="btn-ghost">Tutup</button>
+        </div>
+      </div>
     </div>
   );
 }

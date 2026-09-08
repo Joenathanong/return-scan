@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, ScanLine, History, Printer, Table2,
   Package, Users, Truck, Settings, LogOut, X, KeyRound, Boxes,
-  PackageOpen, FileSpreadsheet, LayoutList, XCircle, ClipboardList,
+  PackageOpen, FileSpreadsheet, LayoutList, XCircle, ClipboardList, UserCog,
 } from "lucide-react";
 
 interface NavItem {
@@ -56,6 +56,7 @@ const GRUP: NavGroup[] = [
     items: [
       { href: "/bongkaran",           label: "Scan Bongkaran", icon: <PackageOpen     className="w-[18px] h-[18px]" /> },
       { href: "/bongkaran/dashboard", label: "Monitoring",     icon: <LayoutList      className="w-[18px] h-[18px]" /> },
+      { href: "/bongkaran/operator",  label: "Laporan Operator", icon: <UserCog        className="w-[18px] h-[18px]" /> },
       { href: "/bongkaran/export",    label: "Export",         icon: <FileSpreadsheet className="w-[18px] h-[18px]" /> },
     ],
   },
