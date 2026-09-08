@@ -412,8 +412,21 @@ Filter rentang tanggal → `.xlsx`. Satu baris per **barang** (resi diulang di
 setiap baris, **bukan** merge cell — merge cell merusak filter dan pivot di
 Excel).
 
-| No. | No Resi | Barcode Scan | Kode SKU | Nama SKU | Quantity | Kondisi | Nama Barang Diterima | Batch | Exp. Date | Scan By | Scan Date |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| No. | No Resi | Barcode Scan | Kode SKU | Nama SKU | Quantity | Kondisi | Nama Barang Diterima | Batch | Exp. Date | Scan By | Scan Date | Expedisi |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+
+Kolom **Expedisi** di paling akhir dicocokkan dari **Scan Retur** lewat nomor
+resi — modul bongkaran sengaja tidak menyimpannya sendiri. Yang tahu paket ini
+datang dari siapa adalah Scan Retur; menyalin nilainya ke tabel bongkaran
+berarti punya dua sumber kebenaran yang akan berbeda begitu ekspedisi sebuah
+resi diralat di sana.
+
+Pencocokannya aman dari penggandaan baris: tabel `scans` punya UNIQUE pada
+`no_resi_unik` untuk baris berstatus `success`, jadi satu resi hanya punya satu
+padanan. Kolomnya **kosong kalau resi itu belum ada di Scan Retur** — keadaan
+yang memang sah, karena bongkar boleh mendahului scan retur. Halaman ekspor
+menghitung berapa resi yang begitu, supaya angka nol atau bukan-nol itu
+terlihat sebelum berkasnya diunduh.
 
 Kolom **Nama Barang Diterima** adalah tambahan dari daftar Anda — tanpa itu,
 data "Isi Salah" kehilangan justru informasi yang bikin ia dicatat.

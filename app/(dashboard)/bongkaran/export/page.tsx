@@ -22,6 +22,8 @@ interface Baris {
   scanDate: string;
   tanggal: string;
   produkTidakDikenal: boolean;
+  /** Dicocokkan dari Scan Retur lewat nomor resi. Kosong = belum ada di sana. */
+  expedisi: string;
 }
 
 interface Balasan {
@@ -130,13 +132,17 @@ function Isi() {
         "Exp. Date": tanggalExcel(r.edDate),
         "Scan By": r.scanBy,
         "Scan Date": waktuExcel(r.scanDate),
+        // Kolom terakhir, sesuai permintaan. Kosong ditulis "—" seperti
+        // kolom lain yang tidak terisi, supaya sel kosong di Excel selalu
+        // berarti "belum diisi" dan bukan "tidak ada padanannya".
+        "Expedisi": r.expedisi || "—",
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);
       ws["!cols"] = [
         { wch: 5 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 34 },
         { wch: 9 }, { wch: 15 }, { wch: 26 }, { wch: 12 }, { wch: 12 },
-        { wch: 18 }, { wch: 20 },
+        { wch: 18 }, { wch: 20 }, { wch: 18 },
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Bongkaran");
@@ -149,6 +155,12 @@ function Isi() {
 
   const resiUnik = rows ? new Set(rows.map((r) => r.noResi)).size : 0;
   const tidakDikenal = rows ? rows.filter((r) => r.produkTidakDikenal).length : 0;
+  // Dihitung per RESI, bukan per baris: satu resi berisi lima barang yang
+  // tidak ketemu di Scan Retur adalah SATU resi yang perlu ditelusuri,
+  // bukan lima.
+  const resiTanpaExpedisi = rows
+    ? new Set(rows.filter((r) => !r.expedisi).map((r) => r.noResi)).size
+    : 0;
 
   return (
     <div className="max-w-4xl space-y-5">
@@ -158,6 +170,7 @@ function Isi() {
         </h1>
         <p className="text-slate-500 mt-1 text-sm">
           Satu baris per barang. Resi yang berisi dua barang muncul dua kali.
+          Kolom <strong>Expedisi</strong> dicocokkan dari Scan Retur lewat nomor resi.
         </p>
       </div>
 
@@ -193,11 +206,24 @@ function Isi() {
 
       {rows && rows.length > 0 && (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Angka label="Baris" nilai={rows.length} />
             <Angka label="Resi" nilai={resiUnik} />
             <Angka label="Barcode belum terdaftar" nilai={tidakDikenal} />
+            <Angka label="Resi tanpa ekspedisi" nilai={resiTanpaExpedisi} />
           </div>
+
+          {resiTanpaExpedisi > 0 && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex gap-2.5 text-sm text-slate-600">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-slate-400" />
+              <p>
+                {resiTanpaExpedisi.toLocaleString("id-ID")} resi belum punya padanan
+                di Scan Retur, jadi kolom Expedisi-nya kosong. Ini keadaan yang sah:
+                bongkar boleh mendahului scan retur. Kalau resinya memang sudah lama
+                di-scan, periksa apakah nomornya berbeda satu-dua karakter.
+              </p>
+            </div>
+          )}
 
           <div className="card overflow-hidden">
             <div className="overflow-x-auto scroll-slim">
@@ -206,7 +232,7 @@ function Isi() {
                   <tr>
                     {["No.", "No Resi", "Barcode Scan", "Kode SKU", "Nama SKU", "Qty",
                       "Kondisi", "Nama Barang Diterima", "Batch", "Exp. Date",
-                      "Scan By", "Scan Date"].map((h) => (
+                      "Scan By", "Scan Date", "Expedisi"].map((h) => (
                       <th key={h} className="text-left px-3 py-2 font-medium">{h}</th>
                     ))}
                   </tr>
@@ -226,6 +252,9 @@ function Isi() {
                       <td className="px-3 py-2">{tanggalExcel(r.edDate)}</td>
                       <td className="px-3 py-2">{r.scanBy}</td>
                       <td className="px-3 py-2 text-xs">{waktuExcel(r.scanDate)}</td>
+                      <td className={cn("px-3 py-2", !r.expedisi && "text-slate-300")}>
+                        {r.expedisi || "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

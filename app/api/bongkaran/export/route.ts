@@ -78,6 +78,37 @@ export async function GET(req: NextRequest) {
       take: PER_HALAMAN,
     });
 
+    // ── Nama ekspedisi, dicocokkan dari Scan Retur ────────────────────────
+    //
+    // Modul bongkaran sengaja TIDAK menyimpan ekspedisi sendiri: yang tahu
+    // paket ini datang dari siapa adalah Scan Retur, dan menyalin nilainya
+    // ke tabel bongkaran berarti punya dua sumber kebenaran yang akan
+    // berbeda begitu ekspedisi sebuah resi diralat di Scan Retur.
+    //
+    // Pencocokannya lewat nomor resi. Tabel scans punya UNIQUE pada
+    // `no_resi_unik` untuk baris berstatus `success`, jadi satu resi hanya
+    // punya SATU baris sukses — pencocokan ini tidak bisa menggandakan
+    // baris ekspor.
+    //
+    // Dilakukan per halaman ekspor, BUKAN sebagai relasi Prisma: tidak ada
+    // foreign key antara bongkaran dan scans (dan memang tidak boleh ada —
+    // bongkar sah terjadi sebelum resinya tercatat di Scan Retur). Satu
+    // kueri tambahan per halaman, bukan satu per baris.
+    const daftarResi = [...new Set(rows.map((r) => r.bongkaran.noResi))];
+    const petaExpedisi = new Map<string, string>();
+
+    // Dipotong-potong: satu klausa IN dengan 2.000 nilai membuat perencana
+    // kueri TiDB bekerja jauh lebih berat daripada empat klausa berisi 500.
+    const POTONG = 500;
+    for (let i = 0; i < daftarResi.length; i += POTONG) {
+      const bagian = daftarResi.slice(i, i + POTONG);
+      const cocok = await prisma.scan.findMany({
+        where: { noResi: { in: bagian }, status: "success" },
+        select: { noResi: true, expedisi: { select: { name: true } } },
+      });
+      for (const c of cocok) petaExpedisi.set(c.noResi, c.expedisi.name);
+    }
+
     return {
       dari,
       sampai,
@@ -103,6 +134,9 @@ export async function GET(req: NextRequest) {
         scanDate: r.scannedAt.toISOString(),
         tanggal: r.bongkaran.date,
         produkTidakDikenal: r.produkTidakDikenal,
+        // Kosong berarti resi ini belum ada di Scan Retur — keadaan yang
+        // memang sah (bongkar boleh mendahului scan retur), bukan kesalahan.
+        expedisi: petaExpedisi.get(r.bongkaran.noResi) ?? "",
       })),
     };
   });
