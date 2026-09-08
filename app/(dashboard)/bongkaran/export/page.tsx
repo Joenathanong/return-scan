@@ -5,7 +5,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { cn } from "@/lib/utils";
 import { mintaJson, pesanError } from "@/lib/http";
 import {
-  FileSpreadsheet, Loader2, AlertCircle, CheckCircle2, X, Download,
+   Loader2, AlertCircle, CheckCircle2, X, Download,
 } from "lucide-react";
 
 interface Baris {
@@ -165,10 +165,8 @@ function Isi() {
   return (
     <div className="max-w-4xl space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <FileSpreadsheet className="w-6 h-6 text-green-600" /> Export Bongkaran
-        </h1>
-        <p className="text-slate-500 mt-1 text-sm">
+        <h1 className="page-title">Export Bongkaran</h1>
+        <p className="page-sub">
           Satu baris per barang. Resi yang berisi dua barang muncul dua kali.
           Kolom <strong>Expedisi</strong> dicocokkan dari Scan Retur lewat nomor resi.
         </p>
@@ -180,11 +178,11 @@ function Isi() {
       <div className="card p-5 space-y-3">
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">Dari tanggal</label>
+            <label className="text-sm font-medium text-ink mb-1.5 block">Dari tanggal</label>
             <input type="date" value={dari} onChange={(e) => setDari(e.target.value)} className="input-field" />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">Sampai tanggal</label>
+            <label className="text-sm font-medium text-ink mb-1.5 block">Sampai tanggal</label>
             <input type="date" value={sampai} onChange={(e) => setSampai(e.target.value)} className="input-field" />
           </div>
         </div>
@@ -214,8 +212,8 @@ function Isi() {
           </div>
 
           {resiTanpaExpedisi > 0 && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex gap-2.5 text-sm text-slate-600">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-slate-400" />
+            <div className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 flex gap-2.5 text-sm text-gray-600">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-gray-400" />
               <p>
                 {resiTanpaExpedisi.toLocaleString("id-ID")} resi belum punya padanan
                 di Scan Retur, jadi kolom Expedisi-nya kosong. Ini keadaan yang sah:
@@ -228,19 +226,19 @@ function Isi() {
           <div className="card overflow-hidden">
             <div className="overflow-x-auto scroll-slim">
               <table className="w-full text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 text-slate-600">
+                <thead className="thead-ocs">
                   <tr>
                     {["No.", "No Resi", "Barcode Scan", "Kode SKU", "Nama SKU", "Qty",
                       "Kondisi", "Nama Barang Diterima", "Batch", "Exp. Date",
                       "Scan By", "Scan Date", "Expedisi"].map((h) => (
-                      <th key={h} className="text-left px-3 py-2 font-medium">{h}</th>
+                      <th key={h}>{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-gray-200">
                   {rows.slice(0, 100).map((r, i) => (
                     <tr key={i} className={cn(r.produkTidakDikenal && "bg-amber-50/60")}>
-                      <td className="px-3 py-2 text-slate-400">{i + 1}</td>
+                      <td className="px-3 py-2 text-gray-400">{i + 1}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.noResi}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.barcode || "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.sku || "—"}</td>
@@ -252,7 +250,7 @@ function Isi() {
                       <td className="px-3 py-2">{tanggalExcel(r.edDate)}</td>
                       <td className="px-3 py-2">{r.scanBy}</td>
                       <td className="px-3 py-2 text-xs">{waktuExcel(r.scanDate)}</td>
-                      <td className={cn("px-3 py-2", !r.expedisi && "text-slate-300")}>
+                      <td className={cn("px-3 py-2", !r.expedisi && "text-gray-300")}>
                         {r.expedisi || "—"}
                       </td>
                     </tr>
@@ -261,7 +259,7 @@ function Isi() {
               </table>
             </div>
             {rows.length > 100 && (
-              <p className="px-3 py-2 text-xs text-slate-400 bg-slate-50 border-t border-slate-100">
+              <p className="px-3 py-2 text-xs text-gray-400 bg-gray-50 border-t border-gray-200">
                 Menampilkan 100 baris pertama. Seluruh {rows.length.toLocaleString("id-ID")} baris
                 ikut terunduh ke Excel.
               </p>
@@ -276,8 +274,8 @@ function Isi() {
 function Angka({ label, nilai }: { label: string; nilai: number }) {
   return (
     <div className="card p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-2xl font-bold text-slate-900 mt-1">{nilai.toLocaleString("id-ID")}</p>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-2xl font-bold text-heading tabular-nums mt-1">{nilai.toLocaleString("id-ID")}</p>
     </div>
   );
 }
@@ -290,14 +288,14 @@ function Kotak({
     <div
       className={cn(
         "rounded-xl px-4 py-3 flex gap-2 items-start border",
-        err ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+        err ? "bg-bad-bg border-bad/25" : "bg-ok-bg border-ok/30"
       )}
     >
       {err
-        ? <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-        : <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />}
-      <p className={cn("text-sm flex-1", err ? "text-red-700" : "text-green-700")}>{pesan}</p>
-      <button onClick={onTutup} className={err ? "text-red-400" : "text-green-500"}>
+        ? <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
+        : <CheckCircle2 className="w-4 h-4 text-ok-strong flex-shrink-0 mt-0.5" />}
+      <p className={cn("text-sm flex-1", err ? "text-bad" : "text-ok-strong")}>{pesan}</p>
+      <button onClick={onTutup} className={err ? "text-bad/60" : "text-ok"}>
         <X className="w-4 h-4" />
       </button>
     </div>

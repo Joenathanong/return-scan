@@ -256,10 +256,8 @@ export default function DataPage() {
     <div className="max-w-6xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Table2 className="w-6 h-6 text-green-600" /> Data &amp; Export
-          </h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="page-title">Data &amp; Export</h1>
+          <p className="page-sub">
             {tersaring.length.toLocaleString("id-ID")} resi ditampilkan
             {anomali.size > 0 && (
               <span className="text-amber-600"> · {anomali.size} perlu dicek</span>
@@ -279,15 +277,15 @@ export default function DataPage() {
       {/* Filter */}
       <div className="card p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="text-xs text-slate-500 mb-1 block">Dari</label>
+          <label className="text-xs text-gray-500 mb-1 block">Dari</label>
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input-field" />
         </div>
         <div>
-          <label className="text-xs text-slate-500 mb-1 block">Sampai</label>
+          <label className="text-xs text-gray-500 mb-1 block">Sampai</label>
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input-field" />
         </div>
         <div className="min-w-[160px]">
-          <label className="text-xs text-slate-500 mb-1 block">Ekspedisi</label>
+          <label className="text-xs text-gray-500 mb-1 block">Ekspedisi</label>
           <select value={expedisiId} onChange={(e) => setExpedisiId(e.target.value)} className="input-field">
             <option value="">Semua</option>
             {expedisiList.map((e) => (
@@ -296,9 +294,9 @@ export default function DataPage() {
           </select>
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="text-xs text-slate-500 mb-1 block">Cari</label>
+          <label className="text-xs text-gray-500 mb-1 block">Cari</label>
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               value={cari}
               onChange={(e) => setCari(e.target.value)}
@@ -345,25 +343,25 @@ export default function DataPage() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex gap-2">
-          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-700 flex-1">{error}</p>
           <button onClick={() => setError("")} className="text-red-400"><X className="w-4 h-4" /></button>
         </div>
       )}
       {info && (
-        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex gap-2">
-          <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-green-700 flex-1">{info}</p>
-          <button onClick={() => setInfo("")} className="text-green-500"><X className="w-4 h-4" /></button>
+        <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 flex gap-2">
+          <CheckCircle2 className="w-4 h-4 text-ok-strong flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-brand-700 flex-1">{info}</p>
+          <button onClick={() => setInfo("")} className="text-brand-500"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="w-7 h-7 animate-spin text-green-600" />
+          <Loader2 className="w-7 h-7 animate-spin text-brand-600" />
         </div>
       ) : tersaring.length === 0 ? (
-        <div className="card p-8 text-center text-slate-400">
+        <div className="card p-8 text-center text-gray-400">
           <Table2 className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p className="text-sm">Tidak ada data untuk filter ini.</p>
         </div>
@@ -371,8 +369,8 @@ export default function DataPage() {
         <div className="card overflow-hidden">
           <div className="overflow-x-auto scroll-slim">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr className="text-left text-xs text-slate-500 uppercase tracking-wide">
+              <thead className="thead-ocs">
+                <tr>
                   <th className="px-3 py-2.5 w-14 text-right">No.</th>
                   <th className="px-3 py-2.5">Kode Resi</th>
                   <th className="px-3 py-2.5 w-20">Karung</th>
@@ -383,15 +381,15 @@ export default function DataPage() {
                   {isAdmin && <th className="px-3 py-2.5 w-20 text-center">Aksi</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-gray-200">
                 {tersaring.slice(0, 1000).map((r, i) => {
                   const aneh = anomali.has(r.id);
                   const sedangDiedit = editId === r.id;
 
                   if (sedangDiedit) {
                     return (
-                      <tr key={r.id} className="bg-green-50">
-                        <td className="px-3 py-2 text-right text-slate-400 tabular-nums">{i + 1}</td>
+                      <tr key={r.id} className="bg-brand-50">
+                        <td className="px-3 py-2 text-right text-gray-400 tabular-nums">{i + 1}</td>
                         <td className="px-3 py-2">
                           <input
                             value={editResi}
@@ -429,9 +427,9 @@ export default function DataPage() {
                             ))}
                           </select>
                         </td>
-                        <td className="px-3 py-2 text-slate-400 truncate max-w-[140px]">{r.scannedByName}</td>
-                        <td className="px-3 py-2 text-slate-400 tabular-nums">{r.date}</td>
-                        <td className="px-3 py-2 text-slate-400 tabular-nums">
+                        <td className="px-3 py-2 text-gray-400 truncate max-w-[140px]">{r.scannedByName}</td>
+                        <td className="px-3 py-2 text-gray-400 tabular-nums">{r.date}</td>
+                        <td className="px-3 py-2 text-gray-400 tabular-nums">
                           {new Date(r.scannedAt).toLocaleTimeString("id-ID", {
                             timeZone: "Asia/Jakarta",
                             hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -442,7 +440,7 @@ export default function DataPage() {
                             <button
                               onClick={() => simpanEdit(r)}
                               disabled={memproses}
-                              className="p-1 rounded text-green-700 hover:bg-green-100 disabled:opacity-40"
+                              className="p-1 rounded text-brand-700 hover:bg-brand-100 disabled:opacity-40"
                               title="Simpan (Enter)"
                             >
                               {memproses
@@ -452,7 +450,7 @@ export default function DataPage() {
                             <button
                               onClick={batalEdit}
                               disabled={memproses}
-                              className="p-1 rounded text-slate-400 hover:bg-slate-200"
+                              className="p-1 rounded text-gray-400 hover:bg-gray-200"
                               title="Batal (Esc)"
                             >
                               <X className="w-4 h-4" />
@@ -464,9 +462,9 @@ export default function DataPage() {
                   }
 
                   return (
-                    <tr key={r.id} className={cn("hover:bg-slate-50", aneh && "bg-amber-50/60")}>
-                      <td className="px-3 py-2 text-right text-slate-400 tabular-nums">{i + 1}</td>
-                      <td className="px-3 py-2 font-mono font-medium text-slate-800">
+                    <tr key={r.id} className={cn("hover:bg-gray-50", aneh && "bg-amber-50/60")}>
+                      <td className="px-3 py-2 text-right text-gray-400 tabular-nums">{i + 1}</td>
+                      <td className="px-3 py-2 font-mono font-medium text-heading">
                         <span className="flex items-center gap-1.5">
                           {r.noResi}
                           {aneh && (
@@ -479,11 +477,11 @@ export default function DataPage() {
                           )}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-slate-600">#{r.nomorKarung}</td>
-                      <td className="px-3 py-2 text-slate-600 truncate max-w-[160px]">{r.expedisiName}</td>
-                      <td className="px-3 py-2 text-slate-600 truncate max-w-[140px]">{r.scannedByName}</td>
-                      <td className="px-3 py-2 text-slate-500 tabular-nums">{r.date}</td>
-                      <td className="px-3 py-2 text-slate-500 tabular-nums">
+                      <td className="px-3 py-2 text-gray-600">#{r.nomorKarung}</td>
+                      <td className="px-3 py-2 text-gray-600 truncate max-w-[160px]">{r.expedisiName}</td>
+                      <td className="px-3 py-2 text-gray-600 truncate max-w-[140px]">{r.scannedByName}</td>
+                      <td className="px-3 py-2 text-gray-500 tabular-nums">{r.date}</td>
+                      <td className="px-3 py-2 text-gray-500 tabular-nums">
                         {new Date(r.scannedAt).toLocaleTimeString("id-ID", {
                           timeZone: "Asia/Jakarta",
                           hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -495,8 +493,8 @@ export default function DataPage() {
                             <button
                               onClick={() => mulaiEdit(r)}
                               disabled={editId !== null}
-                              className="p-1 rounded text-slate-300 hover:text-green-700 hover:bg-green-50
-                                         disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
+                              className="p-1 rounded text-gray-300 hover:text-brand-700 hover:bg-brand-50
+                                         disabled:opacity-30 disabled:hover:text-gray-300 transition-colors"
                               title="Ubah kode resi atau pindah karung"
                             >
                               <Pencil className="w-4 h-4" />
@@ -504,8 +502,8 @@ export default function DataPage() {
                             <button
                               onClick={() => { setVoidUntuk(r); setAlasan(""); }}
                               disabled={editId !== null}
-                              className="p-1 rounded text-slate-300 hover:text-red-600 hover:bg-red-50
-                                         disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
+                              className="p-1 rounded text-gray-300 hover:text-red-600 hover:bg-red-50
+                                         disabled:opacity-30 disabled:hover:text-gray-300 transition-colors"
                               title="Hapus resi ini"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -521,7 +519,7 @@ export default function DataPage() {
           </div>
 
           {tersaring.length > 1000 && (
-            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500">
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-300 text-xs text-gray-500">
               Menampilkan 1.000 dari {tersaring.length.toLocaleString("id-ID")} baris.
               Export Excel tetap berisi seluruhnya.
             </div>
@@ -531,13 +529,13 @@ export default function DataPage() {
 
       {/* Dialog pembatalan */}
       {voidUntuk && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4">
+        <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-card shadow-modal p-6 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto scroll-slim">
             <div>
-              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+              <h3 className="font-semibold text-heading flex items-center gap-2">
                 <Trash2 className="w-5 h-5 text-red-600" /> Hapus Resi?</h3>
-              <p className="font-mono text-sm text-slate-600 mt-1">{voidUntuk.noResi}</p>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="font-mono text-sm text-gray-600 mt-1">{voidUntuk.noResi}</p>
+              <p className="text-xs text-gray-500 mt-1">
                 {voidUntuk.expedisiName} · Karung #{voidUntuk.nomorKarung} · {voidUntuk.date}
               </p>
             </div>
@@ -549,8 +547,8 @@ export default function DataPage() {
                 di-scan ulang.
               </p>
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-              <p className="text-xs text-slate-600">
+            <div className="bg-gray-50 border border-gray-300 rounded-xl px-3 py-2">
+              <p className="text-xs text-gray-600">
                 Di dalam database barisnya tetap disimpan dan ditandai dibatalkan,
                 supaya jejak siapa men-scan apa tidak putus — penting kalau resi
                 ini sudah tercetak di tanda terima yang ditandatangani.
@@ -558,7 +556,7 @@ export default function DataPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              <label className="text-sm font-medium text-ink mb-1.5 block">
                 Alasan penghapusan <span className="text-red-600">*</span>
               </label>
               <input

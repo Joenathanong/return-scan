@@ -9,7 +9,7 @@ import {
   bentrokJenis, PESAN_TOLAK, type BarisProduk,
 } from "@/lib/produk";
 import {
-  Package, Upload, Loader2, AlertCircle, CheckCircle2, X, Search,
+   Upload, Loader2, AlertCircle, CheckCircle2, X, Search,
   FileSpreadsheet, Plus, Barcode, ChevronLeft, ChevronRight, Save, Download,
 } from "lucide-react";
 
@@ -79,10 +79,8 @@ function Isi() {
   return (
     <div className="max-w-5xl space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Package className="w-6 h-6 text-green-600" /> Master Produk
-        </h1>
-        <p className="text-slate-500 mt-1">
+        <h1 className="page-title">Master Produk</h1>
+        <p className="page-sub">
           {total.toLocaleString("id-ID")} SKU terdaftar — dipakai modul Bongkaran
           untuk mengenali barcode yang di-scan
         </p>
@@ -100,9 +98,9 @@ function Isi() {
 
       {/* ── Daftar ── */}
       <div className="card">
-        <div className="p-4 border-b border-slate-100 flex flex-wrap gap-2 items-center">
+        <div className="p-4 border-b border-gray-200 flex flex-wrap gap-2 items-center">
           <div className="relative flex-1 min-w-[220px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               value={cari}
               onChange={(e) => setCari(e.target.value)}
@@ -122,7 +120,7 @@ function Isi() {
           {cariAktif && (
             <button
               onClick={() => { setCari(""); setCariAktif(""); setHalaman(1); }}
-              className="btn-ghost text-sm text-slate-500"
+              className="btn-ghost text-sm text-gray-500"
             >
               Bersihkan
             </button>
@@ -131,14 +129,14 @@ function Isi() {
 
         {loading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-7 h-7 animate-spin text-green-600" />
+            <Loader2 className="w-7 h-7 animate-spin text-brand-600" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="text-center text-slate-400 py-12 text-sm">
+          <p className="text-center text-gray-400 py-12 text-sm">
             {cariAktif ? "Tidak ada yang cocok." : "Belum ada produk. Impor file Excel di atas."}
           </p>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-gray-200">
             {rows.map((p) => (
               <BarisDaftar
                 key={p.sku}
@@ -151,7 +149,7 @@ function Isi() {
         )}
 
         {total > LIMIT && (
-          <div className="p-3 border-t border-slate-100 flex items-center justify-between text-sm">
+          <div className="p-3 border-t border-gray-200 flex items-center justify-between text-sm">
             <button
               onClick={() => setHalaman((h) => Math.max(1, h - 1))}
               disabled={halaman <= 1}
@@ -159,7 +157,7 @@ function Isi() {
             >
               <ChevronLeft className="w-3.5 h-3.5" /> Sebelumnya
             </button>
-            <span className="text-slate-500">
+            <span className="text-gray-500">
               Halaman {halaman} dari {Math.ceil(total / LIMIT)}
             </span>
             <button
@@ -401,11 +399,11 @@ function PanelImpor({
   return (
     <div className="card p-5 space-y-4">
       <div className="flex items-center gap-2">
-        <FileSpreadsheet className="w-5 h-5 text-green-600" />
-        <h2 className="font-semibold text-slate-800">Impor dari Excel</h2>
+        <FileSpreadsheet className="w-5 h-5 text-brand-600" />
+        <h2 className="font-semibold text-heading">Impor dari Excel</h2>
       </div>
 
-      <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-600 space-y-1">
+      <div className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-sm text-gray-600 space-y-1">
         <p>
           File <code className="text-xs bg-white px-1 py-0.5 rounded border">.xlsx</code> dengan
           baris pertama sebagai header. Kolom yang dicari: <strong>SKU</strong>,{" "}
@@ -413,7 +411,7 @@ function PanelImpor({
           <strong>Barcode BPOM</strong> (dua terakhir opsional). Operator boleh
           men-scan yang mana saja — keduanya menemukan produk yang sama.
         </p>
-        <p className="text-slate-500">
+        <p className="text-gray-500">
           Satu SKU boleh ditulis di beberapa baris untuk mendaftarkan beberapa barcode,
           atau ditulis sekali dengan barcode dipisah koma. Impor ulang file yang sama
           aman — yang sudah ada tidak diduplikasi, dan nama hanya ditulis kalau berubah.
@@ -424,7 +422,7 @@ function PanelImpor({
         <button onClick={unduhTemplate} className="btn-ghost text-sm">
           <Download className="w-4 h-4" /> Unduh template
         </button>
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-gray-400">
           Berisi contoh isian dan sheet petunjuk. Isi lalu unggah kembali di bawah.
         </span>
       </div>
@@ -437,21 +435,21 @@ function PanelImpor({
           const f = e.target.files?.[0];
           if (f) bacaBerkas(f);
         }}
-        className="block w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-4
+        className="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4
                    file:rounded-lg file:border-0 file:text-sm file:font-medium
-                   file:bg-green-50 file:text-green-700 hover:file:bg-green-100
+                   file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100
                    file:cursor-pointer cursor-pointer"
       />
 
       {membaca && (
-        <p className="text-sm text-slate-500 flex items-center gap-2">
+        <p className="text-sm text-gray-500 flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Membaca file…
         </p>
       )}
 
       {header.length > 0 && (
         <div className="space-y-3">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-gray-600">
             <strong>{namaBerkas}</strong> — {mentah.length.toLocaleString("id-ID")} baris data
           </p>
 
@@ -462,8 +460,8 @@ function PanelImpor({
               ["barcode", "Kolom Barcode", false],
             ] as const).map(([key, label, wajib]) => (
               <div key={key}>
-                <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-                  {label} {!wajib && <span className="text-slate-400 font-normal">(opsional)</span>}
+                <label className="text-sm font-medium text-ink mb-1.5 block">
+                  {label} {!wajib && <span className="text-gray-400 font-normal">(opsional)</span>}
                 </label>
                 <select
                   value={kolom[key]}
@@ -486,7 +484,7 @@ function PanelImpor({
           ) : (
             <>
               <div className="flex flex-wrap gap-3 text-sm">
-                <span className="text-green-700 font-medium">
+                <span className="text-brand-700 font-medium">
                   {siap.length.toLocaleString("id-ID")} baris siap
                 </span>
                 {ditolak.length > 0 && (
@@ -497,25 +495,25 @@ function PanelImpor({
               </div>
 
               {siap.length > 0 && (
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="overflow-x-auto scroll-slim border border-gray-300 rounded-lg">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-600">
+                    <thead className="thead-ocs">
                       <tr>
-                        <th className="text-left px-3 py-2 font-medium">SKU</th>
-                        <th className="text-left px-3 py-2 font-medium">Nama</th>
-                        <th className="text-left px-3 py-2 font-medium">Barcode</th>
-                        <th className="text-left px-3 py-2 font-medium">Barcode BPOM</th>
+                        <th>SKU</th>
+                        <th>Nama</th>
+                        <th>Barcode</th>
+                        <th>Barcode BPOM</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-gray-200">
                       {siap.slice(0, 5).map((b, i) => (
                         <tr key={i}>
                           <td className="px-3 py-2 font-mono text-xs">{b.sku}</td>
                           <td className="px-3 py-2">{b.nama}</td>
-                          <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                          <td className="px-3 py-2 font-mono text-xs text-gray-500">
                             {b.barcodes.join(", ") || "—"}
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs text-slate-500">
+                          <td className="px-3 py-2 font-mono text-xs text-gray-500">
                             {b.barcodesBpom.join(", ") || "—"}
                           </td>
                         </tr>
@@ -523,7 +521,7 @@ function PanelImpor({
                     </tbody>
                   </table>
                   {siap.length > 5 && (
-                    <p className="px-3 py-2 text-xs text-slate-400 bg-slate-50">
+                    <p className="px-3 py-2 text-xs text-gray-400 bg-gray-50">
                       …dan {(siap.length - 5).toLocaleString("id-ID")} baris lagi
                     </p>
                   )}
@@ -563,9 +561,9 @@ function PanelImpor({
       )}
 
       {hasil && (
-        <div className="border border-slate-200 rounded-xl p-4 space-y-2 text-sm">
-          <p className="font-medium text-slate-800">Hasil impor</p>
-          <ul className="text-slate-600 space-y-0.5">
+        <div className="border border-gray-300 rounded-xl p-4 space-y-2 text-sm">
+          <p className="font-medium text-heading">Hasil impor</p>
+          <ul className="text-gray-600 space-y-0.5">
             <li>{hasil.dibuat.toLocaleString("id-ID")} SKU baru dibuat</li>
             <li>{hasil.namaDiperbarui.toLocaleString("id-ID")} nama diperbarui</li>
             <li>{hasil.tidakBerubah.toLocaleString("id-ID")} tidak berubah (tidak ditulis ulang)</li>
@@ -652,25 +650,25 @@ function TambahManual({
 
   return (
     <div className="card p-5 space-y-3">
-      <h2 className="font-semibold text-slate-800">Produk baru</h2>
+      <h2 className="font-semibold text-heading">Produk baru</h2>
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-sm font-medium text-slate-700 mb-1.5 block">Kode SKU</label>
+          <label className="text-sm font-medium text-ink mb-1.5 block">Kode SKU</label>
           <input value={sku} onChange={(e) => setSku(e.target.value)} className="input-field font-mono" />
         </div>
         <div>
-          <label className="text-sm font-medium text-slate-700 mb-1.5 block">Nama produk</label>
+          <label className="text-sm font-medium text-ink mb-1.5 block">Nama produk</label>
           <input value={nama} onChange={(e) => setNama(e.target.value)} className="input-field" />
         </div>
         <div>
-          <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-            Barcode <span className="text-slate-400 font-normal">(pisah koma)</span>
+          <label className="text-sm font-medium text-ink mb-1.5 block">
+            Barcode <span className="text-gray-400 font-normal">(pisah koma)</span>
           </label>
           <input value={barcode} onChange={(e) => setBarcode(e.target.value)} className="input-field font-mono" />
         </div>
         <div>
-          <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-            Barcode BPOM <span className="text-slate-400 font-normal">(pisah koma)</span>
+          <label className="text-sm font-medium text-ink mb-1.5 block">
+            Barcode BPOM <span className="text-gray-400 font-normal">(pisah koma)</span>
           </label>
           <input
             value={barcodeBpom}
@@ -748,15 +746,15 @@ function BarisDaftar({
 
   if (edit) {
     return (
-      <div className="p-4 space-y-3 bg-slate-50">
-        <p className="font-mono text-xs text-slate-500">{p.sku}</p>
+      <div className="p-4 space-y-3 bg-gray-50">
+        <p className="font-mono text-xs text-gray-500">{p.sku}</p>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Nama</label>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Nama</label>
             <input value={nama} onChange={(e) => setNama(e.target.value)} className="input-field" />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">
+            <label className="text-xs font-medium text-gray-600 mb-1 block">
               Barcode (pisah koma)
             </label>
             <input
@@ -766,7 +764,7 @@ function BarisDaftar({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="text-xs font-medium text-slate-600 mb-1 block">
+            <label className="text-xs font-medium text-gray-600 mb-1 block">
               Barcode BPOM (pisah koma)
             </label>
             <input
@@ -800,12 +798,12 @@ function BarisDaftar({
   return (
     <div className="p-4 flex flex-wrap items-center gap-3">
       <div className="flex-1 min-w-[200px]">
-        <p className="text-sm font-medium text-slate-800 flex items-center gap-2">
-          <span className="font-mono text-xs text-slate-500">{p.sku}</span>
+        <p className="text-sm font-medium text-heading flex items-center gap-2">
+          <span className="font-mono text-xs text-gray-500">{p.sku}</span>
           {!p.active && <span className="badge-danger">Nonaktif</span>}
         </p>
-        <p className="text-sm text-slate-700">{p.nama}</p>
-        <p className="text-xs text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+        <p className="text-sm text-ink">{p.nama}</p>
+        <p className="text-xs text-gray-400 font-mono flex items-center gap-1.5 mt-0.5">
           <Barcode className="w-3.5 h-3.5 flex-shrink-0" />
           {p.barcodes.length > 0 ? p.barcodes.join(", ") : "belum ada barcode"}
         </p>
@@ -822,7 +820,7 @@ function BarisDaftar({
           onClick={ubahAktif}
           className={cn(
             "btn-ghost text-xs",
-            p.active ? "text-red-600 hover:bg-red-50" : "text-green-700 hover:bg-green-50"
+            p.active ? "text-red-600 hover:bg-red-50" : "text-brand-700 hover:bg-brand-50"
           )}
         >
           {p.active ? "Nonaktifkan" : "Aktifkan"}
@@ -840,14 +838,14 @@ function Kotak({
     <div
       className={cn(
         "rounded-xl px-4 py-3 flex gap-2 items-start border",
-        err ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+        err ? "bg-bad-bg border-bad/25" : "bg-ok-bg border-ok/30"
       )}
     >
       {err
-        ? <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-        : <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />}
-      <p className={cn("text-sm flex-1", err ? "text-red-700" : "text-green-700")}>{pesan}</p>
-      <button onClick={onTutup} className={err ? "text-red-400" : "text-green-500"}>
+        ? <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
+        : <CheckCircle2 className="w-4 h-4 text-ok-strong flex-shrink-0 mt-0.5" />}
+      <p className={cn("text-sm flex-1", err ? "text-bad" : "text-ok-strong")}>{pesan}</p>
+      <button onClick={onTutup} className={err ? "text-bad/60" : "text-ok"}>
         <X className="w-4 h-4" />
       </button>
     </div>

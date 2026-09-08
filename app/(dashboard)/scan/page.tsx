@@ -229,8 +229,8 @@ export default function ScanPage() {
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   const gayaFeedback = {
-    idle: "border-slate-200 bg-white",
-    success: "border-green-400 bg-green-50",
+    idle: "border-gray-300 bg-white",
+    success: "border-brand-400 bg-brand-50",
     duplicate: "border-amber-400 bg-amber-50",
     failed: "border-red-400 bg-red-50",
   }[feedback];
@@ -240,30 +240,28 @@ export default function ScanPage() {
     return (
       <div className="max-w-2xl space-y-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Truck className="w-6 h-6 text-green-600" /> Pilih Ekspedisi
-          </h1>
-          <p className="text-slate-500 mt-1">Langkah 1 dari 3</p>
+          <h1 className="page-title">Pilih Ekspedisi</h1>
+          <p className="page-sub">Langkah 1 dari 3</p>
         </div>
 
         {error && <Pesan error={error} />}
 
         {muatExpedisi ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-7 h-7 animate-spin text-green-600" />
+            <Loader2 className="w-7 h-7 animate-spin text-brand-600" />
           </div>
         ) : expedisiList.length === 0 ? (
           <div className="card p-8 text-center space-y-3">
-            <p className="text-slate-500">Belum ada ekspedisi terdaftar.</p>
+            <p className="text-gray-500">Belum ada ekspedisi terdaftar.</p>
             {appUser?.role === "admin" ? (
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-gray-400">
                 Halaman Master Ekspedisi belum dipindahkan. Sementara ini
                 ekspedisi bisa ditambahkan lewat <code className="font-mono">POST /api/expedisi</code>,
                 atau dengan menjalankan <code className="font-mono">npm run db:seed</code> setelah
                 menyalin <code className="font-mono">seed-master.json</code> dari sistem lama.
               </p>
             ) : (
-              <p className="text-sm text-slate-400">Minta admin menambahkannya dulu.</p>
+              <p className="text-sm text-gray-400">Minta admin menambahkannya dulu.</p>
             )}
           </div>
         ) : (
@@ -272,16 +270,16 @@ export default function ScanPage() {
               <button
                 key={e.id}
                 onClick={() => pilihExpedisi(e)}
-                className="card p-4 flex items-center gap-3 text-left hover:border-green-400 transition-colors"
+                className="card p-4 flex items-center gap-3 text-left hover:border-brand-400 transition-colors"
               >
-                <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center flex-shrink-0">
                   <Truck className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-800 truncate">{e.name}</p>
-                  <p className="text-xs text-slate-400 font-mono">{e.code}</p>
+                  <p className="font-medium text-heading truncate">{e.name}</p>
+                  <p className="text-xs text-gray-400 font-mono">{e.code}</p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-300" />
+                <ChevronRight className="w-4 h-4 text-gray-300" />
               </button>
             ))}
           </div>
@@ -296,16 +294,14 @@ export default function ScanPage() {
       <div className="max-w-2xl space-y-5">
         <button
           onClick={() => { setStep("expedisi"); setError(""); }}
-          className="text-sm text-slate-500 hover:text-slate-800 flex items-center gap-1"
+          className="text-sm text-gray-500 hover:text-heading flex items-center gap-1"
         >
           <ChevronLeft className="w-4 h-4" /> Ganti ekspedisi
         </button>
 
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Package className="w-6 h-6 text-green-600" /> Pilih Karung
-          </h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="page-title">Pilih Karung</h1>
+          <p className="page-sub">
             Langkah 2 dari 3 · {expedisi?.name}
           </p>
         </div>
@@ -313,7 +309,7 @@ export default function ScanPage() {
         {error && <Pesan error={error} />}
 
         <div className="card p-4">
-          <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+          <label className="text-sm font-medium text-ink mb-1.5 block">
             Buat karung baru
           </label>
           <div className="flex gap-2">
@@ -338,10 +334,10 @@ export default function ScanPage() {
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-slate-600">Karung hari ini</p>
+            <p className="text-sm font-medium text-gray-600">Karung hari ini</p>
             <button
               onClick={() => expedisi && muatDaftarKarung(expedisi.id)}
-              className="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1"
+              className="text-xs text-gray-400 hover:text-ink flex items-center gap-1"
             >
               <RefreshCw className="w-3 h-3" /> Muat ulang
             </button>
@@ -349,10 +345,10 @@ export default function ScanPage() {
 
           {muatKarung ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+              <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
             </div>
           ) : karungList.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">
+            <p className="text-sm text-gray-400 text-center py-8">
               Belum ada karung hari ini. Buat satu di atas.
             </p>
           ) : (
@@ -368,22 +364,22 @@ export default function ScanPage() {
                       "card p-4 w-full flex items-center gap-3 text-left transition-colors",
                       terkunci
                         ? "opacity-60 cursor-not-allowed"
-                        : "hover:border-green-400"
+                        : "hover:border-brand-400"
                     )}
                   >
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center flex-shrink-0">
                       {terkunci ? <Lock className="w-5 h-5" /> : <Package className="w-5 h-5" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800">Karung #{k.nomorKarung}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="font-medium text-heading">Karung #{k.nomorKarung}</p>
+                      <p className="text-xs text-gray-500">
                         {k.totalResi} resi · dibuat {k.createdByName}
                       </p>
                     </div>
                     {terkunci ? (
                       <span className="badge-danger">Terkunci</span>
                     ) : (
-                      <ChevronRight className="w-4 h-4 text-slate-300" />
+                      <ChevronRight className="w-4 h-4 text-gray-300" />
                     )}
                   </button>
                 );
@@ -400,21 +396,21 @@ export default function ScanPage() {
     <div className="max-w-2xl space-y-4">
       <button
         onClick={() => { setStep("karung"); setTerakhir([]); }}
-        className="text-sm text-slate-500 hover:text-slate-800 flex items-center gap-1"
+        className="text-sm text-gray-500 hover:text-heading flex items-center gap-1"
       >
         <ChevronLeft className="w-4 h-4" /> Ganti karung
       </button>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">
+          <h1 className="text-xl font-bold text-heading">
             {expedisi?.name} · Karung #{karung?.nomorKarung}
           </h1>
-          <p className="text-slate-500 text-sm">{karung?.date}</p>
+          <p className="text-gray-500 text-sm">{karung?.date}</p>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold text-green-600 tabular-nums">{total}</p>
-          <p className="text-xs text-slate-500">resi tersimpan</p>
+          <p className="text-3xl font-bold text-brand-600 tabular-nums">{total}</p>
+          <p className="text-xs text-gray-500">resi tersimpan</p>
         </div>
       </div>
 
@@ -438,27 +434,27 @@ export default function ScanPage() {
             kirimScan(val);
           }}
           disabled={proses}
-          className="w-full px-4 py-5 rounded-xl border-2 border-slate-200 text-2xl font-mono
+          className="w-full px-4 py-5 rounded-xl border-2 border-gray-300 text-2xl font-mono
                      tracking-widest text-center focus:outline-none focus:ring-4
-                     focus:ring-green-200 focus:border-green-400 transition-all
+                     focus:ring-brand-200 focus:border-brand-400 transition-all
                      disabled:opacity-60"
         />
 
         <div className="mt-4 min-h-[64px] flex items-center justify-center text-center">
           {feedback === "idle" ? (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-gray-400">
               {proses ? "Menyimpan..." : "Siap menerima scan"}
             </p>
           ) : (
             <div className="space-y-1">
               <div className="flex items-center justify-center gap-2">
-                {feedback === "success" && <CheckCircle2 className="w-5 h-5 text-green-600" />}
+                {feedback === "success" && <CheckCircle2 className="w-5 h-5 text-brand-600" />}
                 {feedback === "duplicate" && <AlertCircle className="w-5 h-5 text-amber-600" />}
                 {feedback === "failed" && <XCircle className="w-5 h-5 text-red-600" />}
                 <span
                   className={cn(
                     "font-mono font-semibold text-lg break-all",
-                    feedback === "success" && "text-green-700",
+                    feedback === "success" && "text-brand-700",
                     feedback === "duplicate" && "text-amber-700",
                     feedback === "failed" && "text-red-700"
                   )}
@@ -494,13 +490,13 @@ export default function ScanPage() {
       {/* Sepuluh terakhir */}
       {terakhir.length > 0 && (
         <div className="card p-4">
-          <p className="text-sm font-medium text-slate-600 mb-3">Sepuluh terakhir</p>
+          <p className="text-sm font-medium text-gray-600 mb-3">Sepuluh terakhir</p>
           <div className="space-y-1.5">
             {terakhir.map((s) => (
               <div key={s.id} className="flex items-center gap-2 text-sm">
-                <ScanLine className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-                <span className="font-mono text-slate-700 flex-1 truncate">{s.noResi}</span>
-                <span className="text-xs text-slate-400 tabular-nums">
+                <ScanLine className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                <span className="font-mono text-ink flex-1 truncate">{s.noResi}</span>
+                <span className="text-xs text-gray-400 tabular-nums">
                   {new Date(s.scannedAt).toLocaleTimeString("id-ID", {
                     timeZone: "Asia/Jakarta",
                     hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -518,7 +514,7 @@ export default function ScanPage() {
 function Pesan({ error }: { error: string }) {
   return (
     <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex gap-2">
-      <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+      <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
       <p className="text-sm text-red-700">{error}</p>
     </div>
   );

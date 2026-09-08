@@ -107,28 +107,31 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   return (
     <>
       {open && (
-        <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={onClose} />
+        <div
+          className="fixed inset-0 bg-brand-950/50 backdrop-blur-[2px] z-30 lg:hidden"
+          onClick={onClose}
+        />
       )}
 
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full w-64 bg-slate-900 flex flex-col z-40",
+          "fixed top-0 left-0 h-full w-sidebar bg-ocs-sidebar flex flex-col z-40",
           "transition-transform duration-300 lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* ── Kepala ── */}
-        <div className="flex items-center gap-3 px-4 h-16 flex-shrink-0 border-b border-slate-800">
-          <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 h-topbar flex-shrink-0 border-b border-white/10">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-white/10 ring-1 ring-white/15">
             <ScanLine className="w-[18px] h-[18px] text-white" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-white text-sm leading-tight">Scan Retur</p>
-            <p className="text-slate-500 text-xs leading-tight">PT. IEG</p>
+            <p className="text-white/50 text-xs leading-tight">PT. IEG</p>
           </div>
           <button
             onClick={onClose}
-            className="lg:hidden text-slate-500 hover:text-white p-1 rounded -mr-1"
+            className="lg:hidden text-white/60 hover:text-white p-1 rounded -mr-1"
             aria-label="Tutup menu"
           >
             <X className="w-5 h-5" />
@@ -142,7 +145,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           ).map((grup, gi) => (
             <div key={grup.judul ?? `grup-${gi}`} className={gi > 0 ? "mt-5" : ""}>
               {grup.judul && (
-                <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[.08em] text-white/40">
                   {grup.judul}
                 </p>
               )}
@@ -157,10 +160,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       onClick={onClose}
                       aria-current={aktif ? "page" : undefined}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                        "flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
+                        // Menu aktif: gradien indigo→pink + garis pink 3px di
+                        // tepi kiri. Garis itu yang membuat menu aktif tetap
+                        // terbaca sekilas walau latarnya hanya berbeda tipis
+                        // dari sekitarnya.
                         aktif
-                          ? "bg-green-600 text-white font-medium"
-                          : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                          ? "bg-ocs-nav text-white font-semibold shadow-[inset_3px_0_0_#F472B6]"
+                          : "text-slate-200/85 hover:bg-white/[.08] hover:text-white"
                       )}
                     >
                       <span className="flex-shrink-0">{item.icon}</span>
@@ -174,13 +181,15 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         </nav>
 
         {/* ── Kaki: identitas + aksi akun ── */}
-        <div className="flex-shrink-0 border-t border-slate-800 p-3">
+        <div className="flex-shrink-0 border-t border-white/10 p-3">
           <div className="flex items-center gap-2.5">
             <div
               className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                "text-xs font-semibold",
-                isAdmin ? "bg-amber-500/15 text-amber-400" : "bg-green-500/15 text-green-400"
+                "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
+                "text-xs font-semibold ring-1",
+                isAdmin
+                  ? "bg-accent-pink/20 text-accent-pink400 ring-accent-pink/30"
+                  : "bg-white/10 text-white ring-white/15"
               )}
               aria-hidden="true"
             >
@@ -191,7 +200,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               <p className="text-sm text-white truncate leading-tight">
                 {appUser?.name ?? "—"}
               </p>
-              <p className="text-xs text-slate-500 truncate leading-tight">
+              <p className="text-xs text-white/50 truncate leading-tight">
                 {isAdmin ? "Admin" : "Operator"}
               </p>
             </div>
@@ -201,7 +210,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={onClose}
               title="Ganti password"
               aria-label="Ganti password"
-              className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+              className="p-2 rounded-lg text-white/55 hover:text-white hover:bg-white/10 transition-colors"
             >
               <KeyRound className="w-[18px] h-[18px]" />
             </Link>
@@ -210,11 +219,14 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={signOut}
               title="Keluar"
               aria-label="Keluar"
-              className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors"
+              className="p-2 rounded-lg text-white/55 hover:text-accent-pink400 hover:bg-white/10 transition-colors"
             >
               <LogOut className="w-[18px] h-[18px]" />
             </button>
           </div>
+          <p className="text-[11px] text-white/35 text-center mt-2.5">
+            © {new Date().getFullYear()} PT. IEG
+          </p>
         </div>
       </aside>
     </>

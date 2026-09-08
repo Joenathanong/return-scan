@@ -120,10 +120,8 @@ function Isi() {
     <div className="max-w-3xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Truck className="w-6 h-6 text-green-600" /> Master Ekspedisi
-          </h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="page-title">Master Ekspedisi</h1>
+          <p className="page-sub">
             {rows.length} terdaftar · {rows.filter((r) => r.active).length} aktif
           </p>
         </div>
@@ -148,10 +146,10 @@ function Isi() {
 
       {formBuka && (
         <div className="card p-5 space-y-3">
-          <h2 className="font-semibold text-slate-800">Ekspedisi baru</h2>
+          <h2 className="font-semibold text-heading">Ekspedisi baru</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Nama</label>
+              <label className="text-sm font-medium text-ink mb-1.5 block">Nama</label>
               <input
                 value={fNama}
                 onChange={(e) => {
@@ -164,8 +162,8 @@ function Isi() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-                Kode <span className="text-slate-400 font-normal">(permanen)</span>
+              <label className="text-sm font-medium text-ink mb-1.5 block">
+                Kode <span className="text-gray-400 font-normal">(permanen)</span>
               </label>
               <input
                 value={fKode}
@@ -179,7 +177,7 @@ function Isi() {
               <p
                 className={cn(
                   "text-xs mt-1",
-                  fKode && !KODE_RE.test(fKode) ? "text-amber-600" : "text-slate-400"
+                  fKode && !KODE_RE.test(fKode) ? "text-amber-600" : "text-gray-400"
                 )}
               >
                 Huruf kapital, angka, garis bawah. 2–32 karakter.
@@ -201,21 +199,21 @@ function Isi() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="w-7 h-7 animate-spin text-green-600" />
+          <Loader2 className="w-7 h-7 animate-spin text-brand-600" />
         </div>
       ) : rows.length === 0 ? (
-        <div className="card p-8 text-center text-slate-400">
+        <div className="card p-8 text-center text-gray-400">
           <Truck className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p className="text-sm">Belum ada ekspedisi.</p>
         </div>
       ) : (
-        <div className="card overflow-hidden divide-y divide-slate-100">
+        <div className="card overflow-hidden divide-y divide-gray-200">
           {rows.map((e) => (
             <div key={e.id} className="p-4 flex flex-wrap items-center gap-3">
               <div
                 className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                  e.active ? "bg-green-50 text-green-600" : "bg-slate-100 text-slate-400"
+                  e.active ? "bg-brand-50 text-brand-600" : "bg-gray-100 text-gray-400"
                 )}
               >
                 <Truck className="w-5 h-5" />
@@ -240,8 +238,8 @@ function Isi() {
                   </div>
                 ) : (
                   <>
-                    <p className="font-medium text-slate-800 text-sm">{e.name}</p>
-                    <p className="text-xs text-slate-400 font-mono">{e.code}</p>
+                    <p className="font-medium text-heading text-sm">{e.name}</p>
+                    <p className="text-xs text-gray-400 font-mono">{e.code}</p>
                   </>
                 )}
               </div>
@@ -286,14 +284,14 @@ function Kotak({
     <div
       className={cn(
         "rounded-xl px-4 py-3 flex gap-2 items-start border",
-        err ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+        err ? "bg-bad-bg border-bad/25" : "bg-ok-bg border-ok/30"
       )}
     >
       {err
-        ? <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-        : <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />}
-      <p className={cn("text-sm flex-1", err ? "text-red-700" : "text-green-700")}>{pesan}</p>
-      <button onClick={onTutup} className={err ? "text-red-400" : "text-green-500"}>
+        ? <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
+        : <CheckCircle2 className="w-4 h-4 text-ok-strong flex-shrink-0 mt-0.5" />}
+      <p className={cn("text-sm flex-1", err ? "text-bad" : "text-ok-strong")}>{pesan}</p>
+      <button onClick={onTutup} className={err ? "text-bad/60" : "text-ok"}>
         <X className="w-4 h-4" />
       </button>
     </div>

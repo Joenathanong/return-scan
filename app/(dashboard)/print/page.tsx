@@ -227,7 +227,7 @@ export default function PrintPage() {
     <Suspense
       fallback={
         <div className="flex justify-center items-center min-h-[300px]">
-          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
         </div>
       }
     >
@@ -441,10 +441,8 @@ function PrintPageInner() {
     return (
       <div className="max-w-2xl mx-auto space-y-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Printer className="w-6 h-6 text-green-600" /> Print Tanda Terima
-          </h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="page-title">Print Tanda Terima</h1>
+          <p className="page-sub">
             Pilih karung per ekspedisi — bisa beberapa sekaligus
           </p>
         </div>
@@ -461,20 +459,20 @@ function PrintPageInner() {
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex gap-2">
-            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
         {selectedIds.size > 0 && (
-          <div className="sticky top-4 z-20 bg-green-600 text-white rounded-2xl px-5 py-3 flex items-center justify-between shadow-lg shadow-green-200">
+          <div className="sticky top-4 z-20 bg-brand-600 text-white rounded-2xl px-5 py-3 flex items-center justify-between shadow-lg shadow-brand-200">
             <span className="text-sm font-medium">
               {selectedIds.size} karung dipilih ·{" "}
               {expedisiGroups.find((g) => g.expedisiId === activeExpedisi)?.expedisiName}
             </span>
             <button
               onClick={cetakTerpilih}
-              className="bg-white text-green-700 font-semibold text-sm px-4 py-1.5 rounded-xl flex items-center gap-2 hover:bg-green-50 transition-colors"
+              className="bg-white text-brand-700 font-semibold text-sm px-4 py-1.5 rounded-xl flex items-center gap-2 hover:bg-brand-50 transition-colors"
             >
               <Printer className="w-4 h-4" /> Print Gabungan
             </button>
@@ -483,7 +481,7 @@ function PrintPageInner() {
 
         {selectorLoading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+            <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
           </div>
         ) : expedisiGroups.length === 0 ? (
           <div className="card p-8 text-center text-slate-400">
@@ -511,10 +509,10 @@ function PrintPageInner() {
                     {!nonaktif && (
                       <button
                         onClick={() => toggleSemua(group)}
-                        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-green-700 transition-colors"
+                        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-700 transition-colors"
                       >
                         {allSel
-                          ? <CheckSquare className="w-4 h-4 text-green-600" />
+                          ? <CheckSquare className="w-4 h-4 text-brand-600" />
                           : <Square className="w-4 h-4" />}
                         {allSel ? "Batalkan semua" : "Pilih semua"}
                       </button>
@@ -529,7 +527,7 @@ function PrintPageInner() {
                           key={k.id}
                           className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors select-none
                             ${nonaktif ? "cursor-not-allowed" : "hover:bg-slate-50"}
-                            ${checked ? "bg-green-50" : ""}`}
+                            ${checked ? "bg-brand-50" : ""}`}
                         >
                           <input
                             type="checkbox"
@@ -540,7 +538,7 @@ function PrintPageInner() {
                           />
                           <div
                             className={`w-5 h-5 flex-shrink-0 rounded flex items-center justify-center border-2 transition-colors
-                              ${checked ? "bg-green-600 border-green-600" : "border-slate-300"}`}
+                              ${checked ? "bg-brand-600 border-brand-600" : "border-slate-300"}`}
                           >
                             {checked && (
                               <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -559,7 +557,7 @@ function PrintPageInner() {
                           )}
                           <button
                             onClick={(e) => { e.preventDefault(); router.push(`/print?karungId=${k.id}`); }}
-                            className="btn-ghost px-2.5 py-1.5 text-xs text-slate-400 hover:text-green-700"
+                            className="btn-ghost px-2.5 py-1.5 text-xs text-slate-400 hover:text-brand-700"
                             title="Print karung ini saja"
                           >
                             <Printer className="w-3.5 h-3.5" />
@@ -570,7 +568,7 @@ function PrintPageInner() {
                   </div>
 
                   {someSel && (
-                    <div className="px-4 py-3 bg-green-50 border-t border-green-100">
+                    <div className="px-4 py-3 bg-brand-50 border-t border-brand-100">
                       <button onClick={cetakTerpilih} className="btn-primary w-full text-sm">
                         <Printer className="w-4 h-4" />
                         Print Gabungan {selectedIds.size} Karung ({group.expedisiName})
@@ -593,7 +591,7 @@ function PrintPageInner() {
   if (loading) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[300px] gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
         <p className="text-sm text-slate-400">Menyiapkan tanda terima...</p>
       </div>
     );
@@ -664,7 +662,7 @@ function PrintPageInner() {
           >
             <div>
               <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                <Printer className="w-5 h-5 text-green-600" /> Pilih Ukuran Kertas
+                <Printer className="w-5 h-5 text-brand-600" /> Pilih Ukuran Kertas
               </h3>
               <p className="text-sm text-slate-500 mt-1">
                 {rows.length} resi · {expedisiName}
@@ -683,7 +681,7 @@ function PrintPageInner() {
                       setMintaCetak(ps);
                     }}
                     className="w-full text-left px-4 py-3 rounded-xl border-2 border-slate-200
-                               hover:border-green-500 hover:bg-green-50 transition-colors"
+                               hover:border-brand-500 hover:bg-brand-50 transition-colors"
                   >
                     <p className="font-medium text-slate-800">{PAPER[ps].label}</p>
                     <p className="text-xs text-slate-500 mt-0.5">

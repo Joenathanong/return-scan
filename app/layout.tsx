@@ -21,7 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body className="bg-slate-50 text-slate-900 antialiased">
+      <body className="bg-gray-50 text-heading antialiased">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

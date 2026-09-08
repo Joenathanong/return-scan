@@ -35,20 +35,31 @@ export default function DashboardLayout({
           <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </div>
 
-        <div className="lg:pl-64 print:pl-0">
-          {/* Bar atas — hanya tampil di layar kecil, tidak pernah tercetak */}
-          <header className="no-print lg:hidden sticky top-0 z-20 bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
+        <div className="lg:pl-sidebar print:pl-0">
+          {/*
+            Bar atas — hanya tampil di layar kecil, tidak pernah tercetak.
+            Tingginya disamakan dengan kepala sidebar (64px) supaya garis
+            bawah keduanya sejajar saat sidebar dibuka di tablet.
+          */}
+          <header
+            className="no-print lg:hidden sticky top-0 z-20 h-topbar bg-ocs-topbar
+                       border-b border-brand-600/10 px-4 flex items-center gap-3"
+          >
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 -ml-2 text-slate-600 hover:text-slate-900 rounded-lg"
+              className="btn-icon -ml-1"
               aria-label="Buka menu"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="font-semibold text-slate-800">Scan Retur</span>
+            <span className="accent-bar" aria-hidden="true" />
+            <span className="font-semibold text-heading text-base">Scan Retur</span>
           </header>
 
-          <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+          {/* Lebar isi dibatasi supaya baris teks tidak melar di layar lebar,
+              tapi tabel tetap boleh memakai seluruh ruang lewat pembungkus
+              overflow-nya sendiri. */}
+          <main className="p-4 sm:p-6 lg:p-8 print:p-0">{children}</main>
         </div>
       </div>
     </AuthGuard>

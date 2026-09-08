@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { mintaJson, pesanError } from "@/lib/http";
 import type { AppUser } from "@/types";
 import {
-  Users, Plus, Loader2, AlertCircle, CheckCircle2, KeyRound,
+   Plus, Loader2, AlertCircle, CheckCircle2, KeyRound,
   ShieldCheck, User as UserIcon, X, MonitorSmartphone, PackageOpen, LogOut,
 } from "lucide-react";
 
@@ -157,19 +157,17 @@ function Isi() {
     <div className="max-w-4xl space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Users className="w-6 h-6 text-green-600" /> Kelola User
-          </h1>
-          <p className="text-slate-500 mt-1">{rows.length} akun terdaftar</p>
+          <h1 className="page-title">Kelola User</h1>
+          <p className="page-sub">{rows.length} akun terdaftar</p>
         </div>
         <button onClick={() => setFormBuka((v) => !v)} className="btn-primary">
           <Plus className="w-4 h-4" /> Tambah User
         </button>
       </div>
 
-      <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex gap-2.5">
-        <MonitorSmartphone className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-slate-600">
+      <div className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 flex gap-2.5">
+        <MonitorSmartphone className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-gray-600">
           Satu akun hanya bisa aktif di <strong>satu perangkat</strong>. Login baru
           selalu menggusur yang lama, jadi tidak ada akun yang bisa terkunci —
           termasuk akun admin. Pakai <em>Keluarkan</em> kalau perangkatnya hilang
@@ -182,18 +180,18 @@ function Isi() {
 
       {formBuka && (
         <div className="card p-5 space-y-3">
-          <h2 className="font-semibold text-slate-800">Akun baru</h2>
+          <h2 className="font-semibold text-heading">Akun baru</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Email</label>
+              <label className="text-sm font-medium text-ink mb-1.5 block">Email</label>
               <input type="email" value={fEmail} onChange={(e) => setFEmail(e.target.value)} className="input-field" />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Nama</label>
+              <label className="text-sm font-medium text-ink mb-1.5 block">Nama</label>
               <input value={fNama} onChange={(e) => setFNama(e.target.value)} className="input-field" />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Role</label>
+              <label className="text-sm font-medium text-ink mb-1.5 block">Role</label>
               <select
                 value={fRole}
                 onChange={(e) => setFRole(e.target.value as "admin" | "operator")}
@@ -204,7 +202,7 @@ function Isi() {
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 mb-1.5 block">Password awal</label>
+              <label className="text-sm font-medium text-ink mb-1.5 block">Password awal</label>
               <input
                 type="text"
                 value={fPassword}
@@ -221,17 +219,17 @@ function Isi() {
               checked={fRole === "admin" || fBongkaran}
               disabled={fRole === "admin"}
               onChange={(e) => setFBongkaran(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-green-600 disabled:opacity-50"
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 disabled:opacity-50"
             />
-            <span className="text-sm text-slate-700">
+            <span className="text-sm text-ink">
               Bisa mengakses menu <strong>Bongkaran</strong>
               {fRole === "admin" && (
-                <span className="text-slate-400"> — admin selalu bisa</span>
+                <span className="text-gray-400"> — admin selalu bisa</span>
               )}
             </span>
           </label>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-gray-400">
             User akan diminta mengganti password ini saat login pertama.
           </p>
           <div className="flex gap-2">
@@ -249,11 +247,11 @@ function Isi() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="w-7 h-7 animate-spin text-green-600" />
+          <Loader2 className="w-7 h-7 animate-spin text-brand-600" />
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-gray-200">
             {rows.map((u) => {
               const sendiri = u.id === appUser?.id;
               const admin = u.role === "admin";
@@ -262,18 +260,18 @@ function Isi() {
                   <div
                     className={cn(
                       "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-                      admin ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-500"
+                      admin ? "bg-amber-50 text-amber-600" : "bg-gray-100 text-gray-500"
                     )}
                   >
                     {admin ? <ShieldCheck className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
                   </div>
 
                   <div className="flex-1 min-w-[180px]">
-                    <p className="font-medium text-slate-800 text-sm">
+                    <p className="font-medium text-heading text-sm">
                       {u.name}
-                      {sendiri && <span className="text-xs text-slate-400 font-normal"> · Anda</span>}
+                      {sendiri && <span className="text-xs text-gray-400 font-normal"> · Anda</span>}
                     </p>
-                    <p className="text-xs text-slate-500 truncate">{u.email}</p>
+                    <p className="text-xs text-gray-500 truncate">{u.email}</p>
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       <span className={admin ? "badge-warning" : "badge-gray"}>
                         {admin ? "Admin" : "Operator"}
@@ -296,18 +294,18 @@ function Isi() {
                       <MonitorSmartphone
                         className={cn(
                           "w-3.5 h-3.5 flex-shrink-0",
-                          u.sedangLogin ? "text-green-600" : "text-slate-300"
+                          u.sedangLogin ? "text-brand-600" : "text-gray-300"
                         )}
                       />
                       {u.sedangLogin ? (
-                        <span className="text-slate-600">
+                        <span className="text-gray-600">
                           Login di <strong>{u.perangkatLabel ?? "perangkat tidak dikenal"}</strong>
                           {u.sesiSejak && (
-                            <span className="text-slate-400"> · sejak {jamSingkat(u.sesiSejak)}</span>
+                            <span className="text-gray-400"> · sejak {jamSingkat(u.sesiSejak)}</span>
                           )}
                         </span>
                       ) : (
-                        <span className="text-slate-400">Tidak sedang login</span>
+                        <span className="text-gray-400">Tidak sedang login</span>
                       )}
                     </p>
                   </div>
@@ -359,7 +357,7 @@ function Isi() {
                       disabled={sendiri}
                       className={cn(
                         "btn-ghost text-xs disabled:opacity-40",
-                        u.active ? "text-red-600 hover:bg-red-50" : "text-green-700 hover:bg-green-50"
+                        u.active ? "text-red-600 hover:bg-red-50" : "text-brand-700 hover:bg-brand-50"
                       )}
                       title={sendiri ? "Tidak bisa menonaktifkan diri sendiri" : ""}
                     >
@@ -375,14 +373,14 @@ function Isi() {
 
       {/* Dialog atur password */}
       {resetUntuk && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4">
+        <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-card shadow-modal p-6 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto scroll-slim">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-semibold text-slate-900">Atur Password</h3>
-                <p className="text-sm text-slate-500 mt-0.5">{resetUntuk.email}</p>
+                <h3 className="font-semibold text-heading">Atur Password</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{resetUntuk.email}</p>
               </div>
-              <button onClick={() => setResetUntuk(null)} className="text-slate-400 hover:text-slate-700">
+              <button onClick={() => setResetUntuk(null)} className="text-gray-400 hover:text-ink">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -394,7 +392,7 @@ function Isi() {
               placeholder="min. 8 karakter, huruf + angka"
               autoFocus
             />
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-gray-400">
               Catat dan sampaikan ke user. Ia wajib menggantinya saat login berikutnya,
               dan ikatan ke perangkat lamanya ikut dilepas.
             </p>
@@ -414,14 +412,14 @@ function Isi() {
 
       {/* Dialog keluarkan dari perangkat */}
       {keluarkanUntuk && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4">
+        <div className="fixed inset-0 bg-brand-950/50 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-card shadow-modal p-6 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto scroll-slim">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-semibold text-slate-900">Keluarkan dari perangkat?</h3>
-                <p className="text-sm text-slate-500 mt-0.5">{keluarkanUntuk.email}</p>
+                <h3 className="font-semibold text-heading">Keluarkan dari perangkat?</h3>
+                <p className="text-sm text-gray-500 mt-0.5">{keluarkanUntuk.email}</p>
               </div>
-              <button onClick={() => setKeluarkanUntuk(null)} className="text-slate-400 hover:text-slate-700">
+              <button onClick={() => setKeluarkanUntuk(null)} className="text-gray-400 hover:text-ink">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -438,7 +436,7 @@ function Isi() {
               )}
             </div>
 
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-gray-400">
               Data yang sedang diketik di perangkat itu dan belum disimpan akan hilang.
               Password user tidak berubah; ia bisa langsung login lagi.
             </p>
@@ -468,14 +466,14 @@ function Kotak({
     <div
       className={cn(
         "rounded-xl px-4 py-3 flex gap-2 items-start border",
-        err ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+        err ? "bg-bad-bg border-bad/25" : "bg-ok-bg border-ok/30"
       )}
     >
       {err
-        ? <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-        : <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />}
-      <p className={cn("text-sm flex-1", err ? "text-red-700" : "text-green-700")}>{pesan}</p>
-      <button onClick={onTutup} className={err ? "text-red-400" : "text-green-500"}>
+        ? <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
+        : <CheckCircle2 className="w-4 h-4 text-ok-strong flex-shrink-0 mt-0.5" />}
+      <p className={cn("text-sm flex-1", err ? "text-bad" : "text-ok-strong")}>{pesan}</p>
+      <button onClick={onTutup} className={err ? "text-bad/60" : "text-ok"}>
         <X className="w-4 h-4" />
       </button>
     </div>

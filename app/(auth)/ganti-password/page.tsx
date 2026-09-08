@@ -55,17 +55,17 @@ export default function GantiPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-slate-100">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-gray-100">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <KeyRound className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900">
+          <h1 className="text-xl font-bold text-heading">
             {wajib ? "Buat Password Baru" : "Ganti Password"}
           </h1>
           {wajib && (
-            <p className="text-slate-500 text-sm mt-2">
+            <p className="text-gray-500 text-sm mt-2">
               Password Anda saat ini bersifat sementara. Buat password sendiri
               sebelum melanjutkan.
             </p>
@@ -74,10 +74,10 @@ export default function GantiPasswordPage() {
 
         <form
           onSubmit={submit}
-          className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4"
+          className="bg-white rounded-2xl shadow-sm border border-gray-300 p-6 space-y-4"
         >
           <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+            <label className="text-sm font-medium text-ink mb-1.5 block">
               Password saat ini
             </label>
             <input
@@ -92,7 +92,7 @@ export default function GantiPasswordPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+            <label className="text-sm font-medium text-ink mb-1.5 block">
               Password baru
             </label>
             <input
@@ -104,13 +104,13 @@ export default function GantiPasswordPage() {
               required
               disabled={proses || sukses}
             />
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-gray-400 mt-1">
               Minimal 8 karakter, harus ada huruf dan angka.
             </p>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+            <label className="text-sm font-medium text-ink mb-1.5 block">
               Ulangi password baru
             </label>
             <input
@@ -126,15 +126,15 @@ export default function GantiPasswordPage() {
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex gap-2">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
 
           {sukses && (
-            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-green-700">
+            <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 flex gap-2">
+              <CheckCircle2 className="w-4 h-4 text-ok-strong flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-brand-700">
                 Password berhasil diganti. Mengalihkan...
               </p>
             </div>
@@ -152,7 +152,7 @@ export default function GantiPasswordPage() {
 
         <button
           onClick={signOut}
-          className="w-full text-center text-xs text-slate-400 hover:text-slate-600 mt-6"
+          className="w-full text-center text-xs text-gray-400 hover:text-gray-600 mt-6"
         >
           Keluar
         </button>

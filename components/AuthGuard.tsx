@@ -35,7 +35,7 @@ export default function AuthGuard({ children, adminOnly }: Props) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[300px]">
-        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
       </div>
     );
   }

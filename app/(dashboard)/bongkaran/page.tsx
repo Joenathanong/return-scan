@@ -84,6 +84,14 @@ function kunciAcak(): string {
   return `k-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** Warna tiap kondisi saat terpilih — dipakai juga di dashboard. */
+const WARNA_KONDISI: Record<Kondisi, string> = {
+  BAGUS:         "bg-ok border-ok text-white",
+  RUSAK_KEMASAN: "bg-warn border-warn text-white",
+  RUSAK_TOTAL:   "bg-bad border-bad text-white",
+  ISI_SALAH:     "bg-accent border-accent text-white",
+};
+
 let nomorKartu = 0;
 const itemBaru = (): Item => ({
   kunci: `i${++nomorKartu}`,
@@ -146,9 +154,9 @@ function Penjaga() {
   if (appUser.role !== "admin" && !appUser.bisaBongkaran) {
     return (
       <div className="max-w-md card p-6 text-center space-y-2">
-        <PackageOpen className="w-8 h-8 text-slate-300 mx-auto" />
-        <p className="font-medium text-slate-800">Menu Bongkaran belum dibuka</p>
-        <p className="text-sm text-slate-500">
+        <PackageOpen className="w-8 h-8 text-gray-300 mx-auto" />
+        <p className="font-medium text-heading">Menu Bongkaran belum dibuka</p>
+        <p className="text-sm text-gray-500">
           Minta admin mencentang &ldquo;Bisa Bongkaran&rdquo; untuk akun Anda di menu Kelola User.
         </p>
       </div>
@@ -397,10 +405,8 @@ function Isi() {
     <div className="max-w-2xl space-y-4 pb-28">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <PackageOpen className="w-6 h-6 text-green-600" /> Scan Bongkaran
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <h1 className="page-title">Scan Bongkaran</h1>
+          <p className="page-sub">
             {statusCache === "siap"
               ? `${isi.produk.toLocaleString("id-ID")} produk · ${isi.barcode.toLocaleString("id-ID")} barcode di perangkat ini`
               : "Menyiapkan data produk…"}
@@ -418,7 +424,7 @@ function Isi() {
           <button
             onClick={() => setTanyaReset(true)}
             disabled={statusCache === "memuat" || !!sesi}
-            className="btn-ghost text-sm text-slate-500 disabled:opacity-40"
+            className="btn-ghost text-sm text-gray-500 disabled:opacity-40"
             title={
               sesi
                 ? "Selesaikan atau batalkan resi yang sedang dibuka dulu"
@@ -449,7 +455,7 @@ function Isi() {
             "rounded-xl px-4 py-3 flex gap-2.5 text-sm border",
             statusCache === "gagal"
               ? "bg-amber-50 border-amber-200 text-amber-800"
-              : "bg-slate-50 border-slate-200 text-slate-600"
+              : "bg-gray-50 border-gray-300 text-gray-600"
           )}
         >
           {statusCache === "gagal"
@@ -465,10 +471,10 @@ function Isi() {
       {/* ── Langkah 1: resi ── */}
       {!sesi ? (
         <div className="card p-5 space-y-3">
-          <label className="text-sm font-medium text-slate-700 block">No. Resi</label>
+          <label className="text-sm font-medium text-ink block">No. Resi</label>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <ScanLine className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <ScanLine className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 ref={resiRef}
                 value={resi}
@@ -485,7 +491,7 @@ function Isi() {
               Mulai
             </button>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-gray-400">
             Waktu scan dicatat saat resi ini masuk, bukan saat Simpan ditekan.
           </p>
         </div>
@@ -509,13 +515,13 @@ function Isi() {
             />
           ))}
 
-          <button onClick={tambahBarang} className="btn-ghost w-full justify-center border border-dashed border-slate-300 py-3">
+          <button onClick={tambahBarang} className="btn-ghost w-full justify-center border border-dashed border-gray-300 py-3">
             <Plus className="w-4 h-4" /> Barang
           </button>
 
           {/* Bilah simpan — menempel di bawah supaya selalu terjangkau ibu
               jari di layar PDT yang sempit. */}
-          <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-white border-t border-slate-200 p-3 z-20">
+          <div className="fixed bottom-0 left-0 right-0 lg:left-sidebar bg-white/95 backdrop-blur border-t border-brand-600/10 p-3 z-20">
             <div className="max-w-2xl mx-auto space-y-2">
               {masalahPertama && (
                 <p className="text-xs text-amber-700 flex items-center gap-1.5">
@@ -547,16 +553,16 @@ function KepalaSesi({ sesi, onBatal }: { sesi: Sesi; onBatal: () => void }) {
     <div className="card p-4 space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-lg font-semibold text-slate-900 truncate">
+          <p className="font-mono text-lg font-semibold text-heading truncate">
             {sesi.noResi}
           </p>
-          <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+          <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
             <Clock className="w-3.5 h-3.5" />
             {jamWIB(sesi.scannedAt)} WIB
             {sesi.luring && <span className="text-amber-600">· jam perangkat</span>}
           </p>
         </div>
-        <button onClick={onBatal} className="btn-ghost text-xs text-slate-500">
+        <button onClick={onBatal} className="btn-ghost text-xs text-gray-500">
           <X className="w-3.5 h-3.5" /> Batal
         </button>
       </div>
@@ -579,13 +585,13 @@ function KepalaSesi({ sesi, onBatal }: { sesi: Sesi; onBatal: () => void }) {
       )}
 
       {sesi.retur ? (
-        <p className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-600 flex gap-2">
+        <p className="text-xs bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-gray-600 flex gap-2">
           <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           Cocok dengan Scan Retur — {sesi.retur.expedisi}, karung {sesi.retur.karung},{" "}
           {sesi.retur.tanggal}.
         </p>
       ) : !sesi.luring ? (
-        <p className="text-xs text-slate-400 flex gap-2">
+        <p className="text-xs text-gray-400 flex gap-2">
           <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           Belum ada di Scan Retur. Bukan masalah — bongkar boleh mendahului scan retur.
         </p>
@@ -734,15 +740,15 @@ function KartuBarang({
       onKeyDown={pintasKondisi}
       className={cn(
         "card p-4 space-y-3",
-        masalah ? "border-slate-200" : "border-green-200"
+        masalah ? "border-gray-300" : "border-brand-200"
       )}
     >
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-700">Barang {nomor}</p>
+        <p className="text-sm font-semibold text-ink">Barang {nomor}</p>
         {total > 1 && (
           <button
             onClick={onBuang}
-            className="text-slate-400 hover:text-red-600 p-1 rounded"
+            className="text-gray-400 hover:text-red-600 p-1 rounded"
             aria-label={`Buang barang ${nomor}`}
           >
             <Trash2 className="w-4 h-4" />
@@ -752,8 +758,8 @@ function KartuBarang({
 
       {/* ── Kondisi: baris PERTAMA, aktif sejak kartu muncul ── */}
       <div>
-        <label className="text-xs font-medium text-slate-600 mb-1.5 block">
-          Kondisi <span className="text-slate-400 font-normal">· Alt+1…4</span>
+        <label className="text-xs font-medium text-gray-600 mb-1.5 block">
+          Kondisi <span className="text-gray-400 font-normal">· Alt+1…4</span>
         </label>
         <div className="grid grid-cols-2 gap-2">
           {KONDISI.map((k, i) => {
@@ -765,11 +771,14 @@ function KartuBarang({
                 onClick={() => pilihKondisi(k)}
                 className={cn(
                   "px-3 py-2.5 rounded-lg text-sm font-medium border transition-colors text-left",
-                  aktif
-                    ? k === "BAGUS"
-                      ? "bg-green-600 border-green-600 text-white"
-                      : "bg-amber-500 border-amber-500 text-white"
-                    : "bg-white border-slate-200 text-slate-700 hover:border-slate-400"
+                  // Kondisi yang terpilih memakai warna STATUS-nya sendiri,
+                  // bukan warna aksi. Ini satu-satunya tempat di aplikasi
+                  // yang begitu, dan alasannya: yang sedang dipilih di sini
+                  // BUKAN sebuah tindakan, melainkan nilai status yang akan
+                  // tersimpan. Operator yang menoleh sebentar harus bisa
+                  // membaca "merah" sebagai rusak total tanpa mengeja
+                  // tulisannya.
+                  aktif ? WARNA_KONDISI[k] : "bg-white border-gray-300 text-ink hover:border-brand-400"
                 )}
               >
                 <span className="text-[10px] opacity-60 mr-1">{i + 1}</span>
@@ -793,7 +802,7 @@ function KartuBarang({
         <>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 min-w-0">
-            <label className="text-xs font-medium text-slate-600 mb-1.5 block">Barcode</label>
+            <label className="text-xs font-medium text-gray-600 mb-1.5 block">Barcode</label>
             <div className="relative">
               <input
                 ref={barcodeRef}
@@ -821,7 +830,7 @@ function KartuBarang({
                 autoComplete="off"
               />
               {mencari && (
-                <Loader2 className="w-4 h-4 animate-spin text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                <Loader2 className="w-4 h-4 animate-spin text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
               )}
             </div>
             </div>
@@ -834,11 +843,11 @@ function KartuBarang({
               antara baris barcode dan baris batch. */}
           <div className={cn(!(item.barcode && (item.sku || item.tidakDikenal)) && "hidden")}>
             {item.sku && !item.tidakDikenal && (
-              <p className="mt-1.5 text-sm text-green-700 flex items-start gap-1.5">
+              <p className="mt-1.5 text-sm text-ok-strong flex items-start gap-1.5">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>
                   {item.nama}
-                  <span className="text-slate-400 font-mono text-xs ml-2">{item.sku}</span>
+                  <span className="text-gray-400 font-mono text-xs ml-2">{item.sku}</span>
                   {item.jenisBarcode === "BPOM" && (
                     <span className="ml-2 badge-info">via barcode BPOM</span>
                   )}
@@ -868,7 +877,7 @@ function KartuBarang({
         <>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 min-w-0">
-              <label className="text-xs font-medium text-slate-600 mb-1.5 block">
+              <label className="text-xs font-medium text-gray-600 mb-1.5 block">
                 Nama Barang yang Diterima
               </label>
               <input
@@ -886,7 +895,7 @@ function KartuBarang({
             <KolomQty item={item} inputRef={qtyRef} batchRef={batchRef} onUbah={onUbah} />
           </div>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-gray-400">
             Kondisi Isi Salah tidak memakai barcode — barang asing biasanya tidak
             punya barcode yang dikenali sistem ini.
           </p>
@@ -915,12 +924,12 @@ function KartuBarang({
         </div>
 
         <div className="w-full sm:w-[11.5rem] flex-shrink-0">
-          <label className="text-xs font-medium text-slate-600 mb-1.5 block">
+          <label className="text-xs font-medium text-gray-600 mb-1.5 block">
             Exp. Date
             {item.edOtomatis && (
-              <span className="ml-1.5 text-green-600 font-normal">otomatis</span>
+              <span className="ml-1.5 text-brand-600 font-normal">otomatis</span>
             )}
-            {!perluBarcode && <span className="ml-1.5 text-slate-400 font-normal">opsional</span>}
+            {!perluBarcode && <span className="ml-1.5 text-gray-400 font-normal">opsional</span>}
           </label>
           <input
             ref={edRef}
@@ -934,7 +943,7 @@ function KartuBarang({
       </div>
 
       {masalah && (
-        <p className="text-xs text-slate-400">{masalah}</p>
+        <p className="text-xs text-gray-400">{masalah}</p>
       )}
     </div>
   );
@@ -961,7 +970,7 @@ function KolomQty({
     // dan Batch di atas-bawahnya — satu kolom kerdil di tengah tumpukan
     // kolom penuh, dan tepi kanannya tidak sejajar dengan apa pun.
     <div className="w-full sm:w-28 flex-shrink-0">
-      <label className="text-xs font-medium text-slate-600 mb-1.5 block">Quantity</label>
+      <label className="text-xs font-medium text-gray-600 mb-1.5 block">Quantity</label>
       <input
         ref={inputRef}
         value={item.qty}
@@ -1070,9 +1079,9 @@ function KolomBatch({
 
   return (
     <div className="relative">
-      <label className="text-xs font-medium text-slate-600 mb-1.5 block">
+      <label className="text-xs font-medium text-gray-600 mb-1.5 block">
         Batch
-        {opsional && <span className="ml-1.5 text-slate-400 font-normal">opsional</span>}
+        {opsional && <span className="ml-1.5 text-gray-400 font-normal">opsional</span>}
       </label>
       <input
         ref={inputRef}
@@ -1093,7 +1102,7 @@ function KolomBatch({
       )}
 
       {sku && nilai.length > 0 && nilai.length < MIN_KARAKTER_SARAN && (
-        <p className="mt-1.5 text-xs text-slate-400 flex items-center gap-1">
+        <p className="mt-1.5 text-xs text-gray-400 flex items-center gap-1">
           <ChevronDown className="w-3 h-3" />
           Saran batch muncul setelah {MIN_KARAKTER_SARAN} karakter.
         </p>
@@ -1108,7 +1117,7 @@ function KolomBatch({
           // yang membuatnya berguna.
           className="absolute z-30 left-0 top-full mt-1 w-full min-w-[15rem]
                      max-h-52 overflow-y-auto scroll-slim
-                     bg-white border border-slate-200 rounded-xl shadow-lg"
+                     bg-white border border-gray-300 rounded-xl shadow-lg"
         >
           {saran.map((b, i) => (
             <button
@@ -1120,11 +1129,11 @@ function KolomBatch({
               onMouseEnter={() => setSorot(i)}
               className={cn(
                 "w-full text-left px-3 py-2 flex items-center justify-between gap-3 text-sm",
-                i === sorot ? "bg-green-50" : "bg-white"
+                i === sorot ? "bg-brand-50" : "bg-white"
               )}
             >
-              <span className="font-mono text-slate-800">{b.batch}</span>
-              <span className="text-xs text-slate-500">ED {b.edDate}</span>
+              <span className="font-mono text-heading">{b.batch}</span>
+              <span className="text-xs text-gray-500">ED {b.edDate}</span>
             </button>
           ))}
         </div>
@@ -1143,14 +1152,14 @@ function Kotak({
     <div
       className={cn(
         "rounded-xl px-4 py-3 flex gap-2 items-start border",
-        err ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+        err ? "bg-bad-bg border-bad/25" : "bg-ok-bg border-ok/30"
       )}
     >
       {err
-        ? <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-        : <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />}
-      <p className={cn("text-sm flex-1", err ? "text-red-700" : "text-green-700")}>{pesan}</p>
-      <button onClick={onTutup} className={err ? "text-red-400" : "text-green-500"}>
+        ? <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
+        : <CheckCircle2 className="w-4 h-4 text-ok-strong flex-shrink-0 mt-0.5" />}
+      <p className={cn("text-sm flex-1", err ? "text-bad" : "text-ok-strong")}>{pesan}</p>
+      <button onClick={onTutup} className={err ? "text-bad/60" : "text-ok"}>
         <X className="w-4 h-4" />
       </button>
     </div>

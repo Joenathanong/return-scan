@@ -7,7 +7,7 @@ import { todayWIB, shiftDays, formatTanggalPanjang } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import type { Karung, ScanRecord } from "@/types";
 import {
-  History as HistoryIcon, Loader2, AlertCircle, Package, Lock, Unlock,
+  History as Loader2, AlertCircle, Package, Lock, Unlock,
   Printer, ChevronDown, ChevronRight, Trash2, X, RefreshCw,
 } from "lucide-react";
 
@@ -104,17 +104,15 @@ export default function HistoryPage() {
   return (
     <div className="max-w-4xl space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <HistoryIcon className="w-6 h-6 text-green-600" /> Riwayat Karung
-        </h1>
-        <p className="text-slate-500 mt-1">
+        <h1 className="page-title">Riwayat Karung</h1>
+        <p className="page-sub">
           {rows.length} karung · {totalResi.toLocaleString("id-ID")} resi
         </p>
       </div>
 
       <div className="card p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="text-xs text-slate-500 mb-1 block">Dari</label>
+          <label className="text-xs text-gray-500 mb-1 block">Dari</label>
           <input
             type="date"
             value={dateFrom}
@@ -123,7 +121,7 @@ export default function HistoryPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-slate-500 mb-1 block">Sampai</label>
+          <label className="text-xs text-gray-500 mb-1 block">Sampai</label>
           <input
             type="date"
             value={dateTo}
@@ -138,7 +136,7 @@ export default function HistoryPage() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex gap-2">
-          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-700 flex-1">{error}</p>
           <button onClick={() => setError("")} className="text-red-400">
             <X className="w-4 h-4" />
@@ -148,10 +146,10 @@ export default function HistoryPage() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="w-7 h-7 animate-spin text-green-600" />
+          <Loader2 className="w-7 h-7 animate-spin text-brand-600" />
         </div>
       ) : rows.length === 0 ? (
-        <div className="card p-8 text-center text-slate-400">
+        <div className="card p-8 text-center text-gray-400">
           <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p className="text-sm">Tidak ada karung pada rentang tanggal ini.</p>
         </div>
@@ -159,14 +157,14 @@ export default function HistoryPage() {
         <div className="space-y-5">
           {tanggalUrut.map((tgl) => (
             <div key={tgl}>
-              <p className="text-sm font-semibold text-slate-600 mb-2">
+              <p className="text-sm font-semibold text-gray-600 mb-2">
                 {formatTanggalPanjang(tgl)}
-                <span className="font-normal text-slate-400">
+                <span className="font-normal text-gray-400">
                   {" · "}{perTanggal[tgl].length} karung
                 </span>
               </p>
 
-              <div className="card overflow-hidden divide-y divide-slate-100">
+              <div className="card overflow-hidden divide-y divide-gray-200">
                 {perTanggal[tgl].map((k) => {
                   const isOpen = terbuka === k.id;
                   return (
@@ -177,13 +175,13 @@ export default function HistoryPage() {
                           className="flex items-center gap-3 flex-1 min-w-[180px] text-left"
                         >
                           {isOpen
-                            ? <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                            : <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+                            ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            : <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />}
                           <div>
-                            <p className="font-medium text-slate-800 text-sm">
+                            <p className="font-medium text-heading text-sm">
                               {k.expedisiName} · Karung #{k.nomorKarung}
                             </p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-gray-500">
                               {k.totalResi} resi · dibuat {k.createdByName}
                             </p>
                           </div>
@@ -241,29 +239,29 @@ export default function HistoryPage() {
                       </div>
 
                       {isOpen && (
-                        <div className="bg-slate-50 px-4 py-3 border-t border-slate-100">
+                        <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
                           {muatIsi && !isiKarung[k.id] ? (
                             <div className="flex justify-center py-4">
-                              <Loader2 className="w-5 h-5 animate-spin text-green-600" />
+                              <Loader2 className="w-5 h-5 animate-spin text-brand-600" />
                             </div>
                           ) : (isiKarung[k.id]?.length ?? 0) === 0 ? (
-                            <p className="text-xs text-slate-400 text-center py-3">
+                            <p className="text-xs text-gray-400 text-center py-3">
                               Karung ini kosong.
                             </p>
                           ) : (
                             <div className="max-h-72 overflow-y-auto scroll-slim space-y-1 pr-1">
                               {isiKarung[k.id].map((s, i) => (
                                 <div key={s.id} className="flex items-center gap-2 text-xs">
-                                  <span className="text-slate-300 tabular-nums w-8 text-right">
+                                  <span className="text-gray-300 tabular-nums w-8 text-right">
                                     {i + 1}
                                   </span>
-                                  <span className="font-mono text-slate-700 flex-1 truncate">
+                                  <span className="font-mono text-ink flex-1 truncate">
                                     {s.noResi}
                                   </span>
-                                  <span className="text-slate-400 truncate max-w-[120px]">
+                                  <span className="text-gray-400 truncate max-w-[120px]">
                                     {s.scannedByName}
                                   </span>
-                                  <span className="text-slate-400 tabular-nums">
+                                  <span className="text-gray-400 tabular-nums">
                                     {new Date(s.scannedAt).toLocaleTimeString("id-ID", {
                                       timeZone: "Asia/Jakarta",
                                       hour: "2-digit", minute: "2-digit", second: "2-digit",

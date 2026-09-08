@@ -6,7 +6,7 @@ import { todayWIB } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import type { CompanySettings } from "@/types";
 import {
-  Settings as SettingsIcon, Save, Loader2, CheckCircle2, Building2,
+  Settings as Save, Loader2, CheckCircle2, Building2,
   FileText, Sheet, ExternalLink, Info, Upload, AlertTriangle, X, AlertCircle,
 } from "lucide-react";
 
@@ -110,7 +110,7 @@ function Isi() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
       </div>
     );
   }
@@ -118,23 +118,21 @@ function Isi() {
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <SettingsIcon className="w-6 h-6 text-green-600" /> Pengaturan Sistem
-        </h1>
-        <p className="text-slate-500 mt-1">Konfigurasi aplikasi dan integrasi</p>
+        <h1 className="page-title">Pengaturan Sistem</h1>
+        <p className="page-sub">Konfigurasi aplikasi dan integrasi</p>
       </div>
 
       {/* Perusahaan */}
       <div className="card p-6 space-y-4">
-        <h2 className="font-semibold text-slate-800 flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-green-600" /> Informasi Perusahaan
+        <h2 className="font-semibold text-heading flex items-center gap-2">
+          <Building2 className="w-5 h-5 text-brand-600" /> Informasi Perusahaan
         </h2>
         <div>
-          <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+          <label className="text-sm font-medium text-ink mb-1.5 block">
             Nama Perusahaan
           </label>
           <input value={nama} onChange={(e) => setNama(e.target.value)} className="input-field" />
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             Muncul di tanda terima bagian &quot;Yang Menerima&quot;.
           </p>
         </div>
@@ -142,8 +140,8 @@ function Isi() {
 
       {/* Note tanda terima */}
       <div className="card p-6 space-y-4">
-        <h2 className="font-semibold text-slate-800 flex items-center gap-2">
-          <FileText className="w-5 h-5 text-green-600" /> Teks Note Tanda Terima
+        <h2 className="font-semibold text-heading flex items-center gap-2">
+          <FileText className="w-5 h-5 text-brand-600" /> Teks Note Tanda Terima
         </h2>
         <textarea
           value={note}
@@ -161,8 +159,8 @@ function Isi() {
 
       {/* Google Sheets */}
       <div className="card p-6 space-y-4">
-        <h2 className="font-semibold text-slate-800 flex items-center gap-2">
-          <Sheet className="w-5 h-5 text-green-600" /> Ekspor Google Sheets
+        <h2 className="font-semibold text-heading flex items-center gap-2">
+          <Sheet className="w-5 h-5 text-brand-600" /> Ekspor Google Sheets
         </h2>
 
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex gap-2">
@@ -188,7 +186,7 @@ function Isi() {
         </div>
 
         <div>
-          <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+          <label className="text-sm font-medium text-ink mb-1.5 block">
             Spreadsheet ID atau URL
           </label>
           <input
@@ -197,7 +195,7 @@ function Isi() {
             className="input-field font-mono text-xs"
             placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
           />
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             Boleh tempel URL lengkapnya — ID-nya diambil otomatis.
           </p>
         </div>
@@ -207,17 +205,17 @@ function Isi() {
             href={`https://docs.google.com/spreadsheets/d/${settings.spreadsheetId}/edit`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm text-green-600 hover:text-green-800"
+            className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-800"
           >
             <ExternalLink className="w-3.5 h-3.5" /> Buka Spreadsheet
           </a>
         )}
 
-        <div className="border-t border-slate-100 pt-4 space-y-3">
-          <p className="text-sm font-medium text-slate-700">Jalankan ekspor</p>
+        <div className="border-t border-gray-200 pt-4 space-y-3">
+          <p className="text-sm font-medium text-ink">Jalankan ekspor</p>
           <div className="flex items-end gap-3 flex-wrap">
             <div className="flex-1 min-w-[180px]">
-              <label className="text-xs text-slate-500 mb-1 block">Tanggal</label>
+              <label className="text-xs text-gray-500 mb-1 block">Tanggal</label>
               <input
                 type="date"
                 value={tglEkspor}
@@ -239,7 +237,7 @@ function Isi() {
 
           {errorEkspor && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex gap-2">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 text-bad flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-700 flex-1">{errorEkspor}</p>
               <button onClick={() => setErrorEkspor("")} className="text-red-400">
                 <X className="w-4 h-4" />
@@ -251,13 +249,13 @@ function Isi() {
             <div
               className={cn(
                 "rounded-xl border px-4 py-3 space-y-2",
-                hasil.gagal ? "bg-amber-50 border-amber-200" : "bg-green-50 border-green-200"
+                hasil.gagal ? "bg-amber-50 border-amber-200" : "bg-brand-50 border-brand-200"
               )}
             >
               <p
                 className={cn(
                   "text-sm font-semibold flex items-center gap-2",
-                  hasil.gagal ? "text-amber-800" : "text-green-700"
+                  hasil.gagal ? "text-amber-800" : "text-brand-700"
                 )}
               >
                 {hasil.gagal
@@ -273,12 +271,12 @@ function Isi() {
                       <span
                         className={cn(
                           "font-mono flex-1 truncate",
-                          t.status === "ok" ? "text-green-700" : "text-red-700"
+                          t.status === "ok" ? "text-brand-700" : "text-red-700"
                         )}
                       >
                         {t.tab}
                       </span>
-                      <span className="text-slate-500 tabular-nums">{t.baris} baris</span>
+                      <span className="text-gray-500 tabular-nums">{t.baris} baris</span>
                       <span className={t.status === "ok" ? "badge-success" : "badge-danger"}>
                         {t.status === "ok" ? "ok" : "gagal"}
                       </span>
@@ -296,7 +294,7 @@ function Isi() {
                   href={hasil.spreadsheetUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-green-700 hover:underline"
+                  className="inline-flex items-center gap-1.5 text-xs text-brand-700 hover:underline"
                 >
                   <ExternalLink className="w-3 h-3" /> Buka spreadsheet
                 </a>
@@ -312,7 +310,7 @@ function Isi() {
         </div>
       )}
       {tersimpan && (
-        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center gap-2">
+        <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 text-sm text-brand-700 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" /> Pengaturan tersimpan.
         </div>
       )}
