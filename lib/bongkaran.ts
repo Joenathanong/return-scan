@@ -69,6 +69,67 @@ export function labelKamera(v: number | null | undefined): string {
   return isKamera(v) ? `Kamera ${v}` : "";
 }
 
+// ─── Resi yang rusak / tidak terbaca ─────────────────────────────────────────
+
+/**
+ * Awalan nomor pengganti untuk paket yang label resinya sobek/tidak terbaca.
+ *
+ * INI SEKALIGUS PENANDANYA. Tidak ada kolom boolean terpisah di database:
+ * awalan ini hanya boleh dibuat SERVER (lihat penolakan di /api/bongkaran/
+ * mulai dan /simpan kalau nomor berawalan ini datang dari ketikan operator),
+ * jadi kehadirannya di kolom `no_resi` adalah pernyataan yang bisa dipercaya
+ * — dan indeks `no_resi` yang sudah ada melayani pencarian awalan tanpa
+ * tambahan apa pun.
+ */
+export const AWALAN_TANPA_RESI = "TANPA-RESI-";
+
+/** Panjang maksimum catatan, sejalan dengan VarChar(191) di skema. */
+export const CATATAN_MAKS = 191;
+
+const fmtTanggalNomor = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Jakarta",
+  year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+const fmtJamNomor = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Jakarta",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+  // h23, bukan hour12:false — sebagian ICU menuliskan tengah malam sebagai
+  // "24:00:00" dengan hour12:false, dan nomor yang tanggalnya hari ini tapi
+  // jamnya 24 adalah nomor yang tidak pernah bisa dijelaskan.
+  hourCycle: "h23",
+});
+
+/**
+ * Nomor pengganti: TANPA-RESI-20260909-K2-142335
+ *                              tanggal  kamera jam WIB
+ *
+ * Kenapa jam+kamera, bukan urutan harian 001/002:
+ *
+ *   • NOL kueri. Penomoran urut butuh `max()` per penekanan tombol, dan
+ *     jalur ini justru dirancang lebih murah daripada scan biasa — dua
+ *     kueri pencocokan (duplikat + Scan Retur) memang dilewati, karena
+ *     tidak ada nomor yang bisa dicocokkan.
+ *   • Tidak bisa kembar tanpa perlu indeks unik. Kolom `no_resi` sengaja
+ *     tidak unik (satu resi boleh datang dalam dua koli), jadi penomoran
+ *     urut tidak punya penjaga apa pun: dua operator yang menekan tombol
+ *     pada detik yang sama akan mendapat angka yang sama dan tidak ada
+ *     yang memberi tahu. Di sini kamera dan detik yang membedakan.
+ *   • Nomornya sendiri sudah menunjuk rekamannya: tanggal, kamera, jam —
+ *     persis tiga hal yang dibutuhkan untuk membuka CCTV yang benar.
+ *     Untuk baris tanpa resi, ini satu-satunya jalan menelusuri asalnya.
+ */
+export function nomorTanpaResi(kamera: number, saat: Date): string {
+  const tanggal = fmtTanggalNomor.format(saat).replace(/-/g, "");
+  const jam = fmtJamNomor.format(saat).replace(/[^0-9]/g, "");
+  return `${AWALAN_TANPA_RESI}${tanggal}-K${kamera}-${jam}`;
+}
+
+/** Apakah baris ini dibongkar tanpa nomor resi yang terbaca? */
+export function tanpaResi(noResi: string | null | undefined): boolean {
+  return String(noResi ?? "").startsWith(AWALAN_TANPA_RESI);
+}
+
 // ─── Batch → tanggal produksi → ED ───────────────────────────────────────────
 
 /** Umur simpan tetap: 3 tahun, selalu jatuh di tanggal 1. */

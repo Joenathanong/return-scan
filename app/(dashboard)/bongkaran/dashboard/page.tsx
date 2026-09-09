@@ -10,7 +10,7 @@ import { LABEL_KONDISI, type Kondisi } from "@/lib/bongkaran";
 import {
   Loader2, AlertCircle, CheckCircle2, X, PackageOpen,
   Barcode, Clock, Trash2, RefreshCw, FileSpreadsheet, Video, Wand2,
-  Eye, Save, ChevronRight, Brush,
+  Eye, Save, ChevronRight, Brush, FileWarning,
 } from "lucide-react";
 
 /**
@@ -36,7 +36,14 @@ interface Data {
   ringkasan: { resi: number; barang: number; qty: number };
   kondisi: { kondisi: Kondisi; barang: number; qty: number }[];
   grafik: { tanggal: string; resi: number }[];
-  operator: { id: string; nama: string; resi: number; terakhir: string | null }[];
+  operator: {
+    id: string; nama: string; resi: number;
+    /** Berapa di antaranya dibongkar tanpa nomor resi. */
+    tanpaResi: number;
+    terakhir: string | null;
+  }[];
+  /** Total paket tanpa nomor resi hari ini. */
+  tanpaResi: number;
   draft: { id: string; noResi: string; tanggal: string; scannedAt: string; oleh: string }[];
   /** Seluruh draft yang ada, termasuk yang tidak ikut ditampilkan. */
   draftTotal: number;
@@ -378,7 +385,15 @@ function Isi() {
           {/* ── Operator ── */}
           <div className="card">
             <div className="p-4 pb-2 flex items-center justify-between gap-3">
-              <p className="font-semibold text-heading text-sm">Per operator</p>
+              <div>
+                <p className="font-semibold text-heading text-sm">Per operator</p>
+                {d.tanpaResi > 0 && (
+                  <p className="text-xs text-warn flex items-center gap-1 mt-0.5">
+                    <FileWarning className="w-3 h-3" />
+                    {d.tanpaResi} paket dibongkar tanpa nomor resi hari ini
+                  </p>
+                )}
+              </div>
               <Link href="/bongkaran/operator" className="btn-ghost text-xs">
                 Lihat detail <ChevronRight className="w-3.5 h-3.5" />
               </Link>
@@ -392,6 +407,17 @@ function Isi() {
                     <span className="text-heading">{o.nama}</span>
                     <span className="text-gray-500 flex items-center gap-3">
                       <span>{o.resi} resi</span>
+                      {/* Hanya muncul kalau ADA. Kolom yang selalu terlihat
+                          dengan angka 0 berhenti dibaca; angka yang muncul
+                          hanya saat berarti sesuatu justru menarik mata. */}
+                      {o.tanpaResi > 0 && (
+                        <span
+                          className="badge-warning inline-flex items-center gap-1"
+                          title="Dibongkar tanpa nomor resi — label sobek/tidak terbaca"
+                        >
+                          <FileWarning className="w-3 h-3" /> {o.tanpaResi} tanpa resi
+                        </span>
+                      )}
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" /> {jamWIB(o.terakhir)}
                       </span>

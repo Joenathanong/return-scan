@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { handle, requireBongkaran } from "@/lib/api";
 import { todayWIB, shiftDays } from "@/lib/date";
-import { KONDISI, KAMERA, type Kondisi } from "@/lib/bongkaran";
+import {
+  KONDISI, KAMERA, AWALAN_TANPA_RESI, type Kondisi,
+} from "@/lib/bongkaran";
 import { sapuJikaPerlu } from "@/lib/draft-server";
 import { UMUR_DRAFT_SAPU_JAM } from "@/lib/draft";
 
@@ -59,6 +61,7 @@ export async function GET(req: NextRequest) {
       barcodeAsing,
       waktuMeragukan,
       perKamera,
+      tanpaResiPerOperator,
     ] = await Promise.all([
       prisma.bongkaran.count({ where: { date: tanggal, status: "final" } }),
 
@@ -132,10 +135,39 @@ export async function GET(req: NextRequest) {
         where: { date: tanggal, status: "final" },
         _count: { _all: true },
       }),
+
+      /*
+        Paket yang dibongkar tanpa nomor resi, per operator.
+
+        Ini BUKAN angka hiasan. Tombol "resi rusak / tidak terbaca" adalah
+        jalan keluar yang sah, tapi juga jalan pintas yang menggoda setiap
+        kali barcode resi susah terbaca — dan setiap kali dipakai, satu
+        paket kehilangan kaitannya ke Scan Retur dan ke ekspedisinya. Kalau
+        pemakaiannya menumpuk di satu orang, itu harus terlihat sebagai
+        angka sekarang, bukan ditemukan setahun lagi saat ada yang mencari
+        satu paket dan tidak menemukan apa-apa.
+
+        Dikenali dari awalan nomor — awalan yang hanya bisa dibuat server —
+        dan indeks `no_resi` yang sudah ada melayani pencarian awalan ini
+        tanpa tambahan apa pun.
+      */
+      prisma.bongkaran.groupBy({
+        by: ["scannedById"],
+        where: {
+          date: tanggal,
+          status: "final",
+          noResi: { startsWith: AWALAN_TANPA_RESI },
+        },
+        _count: { _all: true },
+      }),
     ]);
 
     // Nama operator: satu query terpisah, bukan relasi di groupBy (groupBy
     // tidak bisa membawa relasi).
+    const petaTanpaResi = new Map(
+      tanpaResiPerOperator.map((t) => [t.scannedById, t._count._all])
+    );
+
     const idOperator = perOperator.map((o) => o.scannedById);
     const namaOperator = idOperator.length
       ? await prisma.user.findMany({
@@ -176,6 +208,7 @@ export async function GET(req: NextRequest) {
           id: o.scannedById,
           nama: petaNama.get(o.scannedById) ?? "(user terhapus)",
           resi: o._count._all,
+          tanpaResi: petaTanpaResi.get(o.scannedById) ?? 0,
           terakhir: o._max.scannedAt?.toISOString() ?? null,
         }))
         .sort((a, b) => b.resi - a.resi),
@@ -186,6 +219,8 @@ export async function GET(req: NextRequest) {
         scannedAt: d.scannedAt.toISOString(),
         oleh: d.scannedBy.name,
       })),
+      /** Total paket tanpa resi hari ini. */
+      tanpaResi: tanpaResiPerOperator.reduce((a, t) => a + t._count._all, 0),
       draftTotal,
       /** Ambang penyapuan otomatis — layar menyebutkannya, bukan mengarangnya. */
       draftUmurSapuJam: UMUR_DRAFT_SAPU_JAM,

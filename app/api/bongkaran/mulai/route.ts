@@ -2,7 +2,10 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { handle, requireBongkaran, cleanResi, badRequest } from "@/lib/api";
 import { todayWIB } from "@/lib/date";
-import { isKamera } from "@/lib/bongkaran";
+import {
+  isKamera, nomorTanpaResi, tanpaResi, AWALAN_TANPA_RESI, CATATAN_MAKS,
+} from "@/lib/bongkaran";
+import { bersihkanNama } from "@/lib/produk";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,14 +31,84 @@ export const dynamic = "force-dynamic";
  *   • apakah resi ini ada di Scan Retur (informasi, bukan syarat —
  *     bongkar bisa terjadi sebelum resinya sempat tercatat).
  */
+/**
+ * Riwayat satu nomor resi — SATU kueri untuk dua pertanyaan:
+ *
+ *   • pernahkah resi ini SELESAI dibongkar (peringatan duplikat), dan
+ *   • apakah operator ini masih punya DRAFT tertinggal untuk resi yang sama
+ *     (dipakai ulang, bukan ditumpuk).
+ *
+ * Ditulis sebagai fungsi, bukan dituliskan langsung di dalam handler,
+ * supaya tipe hasilnya punya nama — jalur tanpa resi melewati kueri ini
+ * dan tetap harus menghasilkan bentuk yang sama persis.
+ *
+ * TIDAK diekspor: App Router hanya mengizinkan handler HTTP dan beberapa
+ * konstanta khusus diekspor dari route.ts.
+ */
+async function cariRiwayat(noResi: string, uid: string) {
+  return prisma.bongkaran.findMany({
+    where: {
+      noResi,
+      OR: [{ status: "final" }, { status: "draft", scannedById: uid }],
+    },
+    select: {
+      id: true, scannedAt: true, date: true, status: true, scannedById: true,
+      scannedBy: { select: { name: true } },
+      _count: { select: { items: true } },
+    },
+    orderBy: { scannedAt: "desc" },
+    take: 10,
+  });
+}
+
+async function cariScanRetur(noResi: string) {
+  return prisma.scan.findFirst({
+    where: { noResi, status: "success" },
+    select: {
+      date: true,
+      expedisi: { select: { name: true, code: true } },
+      karung: { select: { nomorKarung: true } },
+    },
+  });
+}
+
+type Riwayat = Awaited<ReturnType<typeof cariRiwayat>>;
+type Retur = Awaited<ReturnType<typeof cariScanRetur>>;
+
 export async function POST(req: NextRequest) {
   return handle(async () => {
     const me = await requireBongkaran();
 
-    const body = (await req.json()) as { noResi?: string; kamera?: number };
-    const noResi = cleanResi(body.noResi);
-    if (!noResi) throw badRequest("Nomor resi wajib diisi.");
-    if (noResi.length > 64) throw badRequest("Nomor resi terlalu panjang.");
+    const body = (await req.json()) as {
+      noResi?: string; kamera?: number; tanpaResi?: boolean; catatan?: string;
+    };
+
+    /** Paket yang label resinya sobek / tidak terbaca sama sekali. */
+    const labelRusak = body.tanpaResi === true;
+
+    const catatan = bersihkanNama(body.catatan).slice(0, CATATAN_MAKS) || null;
+
+    let noResi = "";
+    if (!labelRusak) {
+      noResi = cleanResi(body.noResi);
+      if (!noResi) throw badRequest("Nomor resi wajib diisi.");
+      if (noResi.length > 64) throw badRequest("Nomor resi terlalu panjang.");
+
+      // Awalan nomor pengganti HANYA boleh lahir dari server.
+      //
+      // Kalau operator boleh mengetiknya sendiri, awalan itu berhenti jadi
+      // pernyataan "sistem tidak menemukan nomor resi" dan berubah jadi
+      // "seseorang mengetik sesuatu yang mirip" — dan seluruh perhitungan
+      // yang bersandar padanya (penghitung di dashboard, kolom Catatan di
+      // ekspor, pengecualian pencocokan ekspedisi) ikut kehilangan arti.
+      if (tanpaResi(noResi)) {
+        throw badRequest(
+          `Nomor resi tidak boleh diawali "${AWALAN_TANPA_RESI}" — awalan itu dipakai ` +
+            "sistem untuk paket yang labelnya tidak terbaca. Pakai tombol " +
+            '"Resi rusak / tidak terbaca" kalau memang begitu keadaannya.'
+        );
+      }
+    }
 
     // Kamera WAJIB di sini, walaupun kolomnya nullable di database.
     //
@@ -51,42 +124,18 @@ export async function POST(req: NextRequest) {
     }
 
     /*
-      SATU kueri untuk dua pertanyaan sekaligus:
+      JALUR TANPA RESI TIDAK MENYENTUH DUA KUERI DI BAWAH SAMA SEKALI.
 
-        • pernahkah resi ini SELESAI dibongkar (peringatan duplikat), dan
-        • apakah operator ini masih punya DRAFT tertinggal untuk resi yang
-          sama (dipakai ulang, bukan ditumpuk).
-
-      Sebelumnya hanya pertanyaan pertama yang ditanyakan, dan setiap scan
-      selalu membuat baris baru. Akibatnya: resi yang gagal disimpan lalu
-      di-scan ulang meninggalkan satu draft kosong PER PERCOBAAN, dan
-      panel "Belum selesai" di dashboard menjadi tumpukan yang tak pernah
-      berkurang. Menambah cabang di sini tidak menambah kueri — `findMany`
-      menggantikan `findFirst` yang tadinya sudah ada.
+      Keduanya menjawab pertanyaan yang hanya masuk akal kalau ada nomor
+      yang bisa dicocokkan: "pernah dibongkar sebelumnya?" dan "ada di Scan
+      Retur?". Untuk nomor yang baru saja dibuat sistem, jawabannya sudah
+      pasti tidak — menanyakannya ke TiDB hanya menghabiskan kuota untuk
+      mendengar hal yang sudah diketahui. Jadi jalur ini justru LEBIH MURAH
+      daripada scan resi biasa: nol kueri sebelum menulis, bukan dua.
     */
-    const [riwayat, diScanRetur] = await Promise.all([
-      prisma.bongkaran.findMany({
-        where: {
-          noResi,
-          OR: [{ status: "final" }, { status: "draft", scannedById: me.id }],
-        },
-        select: {
-          id: true, scannedAt: true, date: true, status: true, scannedById: true,
-          scannedBy: { select: { name: true } },
-          _count: { select: { items: true } },
-        },
-        orderBy: { scannedAt: "desc" },
-        take: 10,
-      }),
-      prisma.scan.findFirst({
-        where: { noResi, status: "success" },
-        select: {
-          date: true,
-          expedisi: { select: { name: true, code: true } },
-          karung: { select: { nomorKarung: true } },
-        },
-      }),
-    ]);
+    const [riwayat, diScanRetur]: [Riwayat, Retur] = labelRusak
+      ? [[], null]
+      : await Promise.all([cariRiwayat(noResi, me.id), cariScanRetur(noResi)]);
 
     const sebelumnya = riwayat.find((r) => r.status === "final") ?? null;
 
@@ -103,6 +152,12 @@ export async function POST(req: NextRequest) {
       ) ?? null;
 
     const scannedAt = new Date();
+
+    // Nomornya dibuat DI SINI, dari jam server dan kamera yang sama dengan
+    // yang tersimpan di barisnya — bukan di klien. Nomor yang dibuat klien
+    // akan memakai jam PDT, dan justru pada baris tanpa resi jam itulah
+    // satu-satunya jalan menemukan rekamannya kembali.
+    if (labelRusak) noResi = nomorTanpaResi(kamera, scannedAt);
 
     // Dipakai ulang = update, bukan create. Jumlah kueri tetap satu, dan
     // barisnya tetap satu — inilah bedanya dengan sebelumnya.
@@ -123,6 +178,7 @@ export async function POST(req: NextRequest) {
             noResi,
             scannedAt,
             kamera,
+            catatan,
             scannedById: me.id,
             date: todayWIB(),
             status: "draft",
@@ -138,6 +194,8 @@ export async function POST(req: NextRequest) {
       kamera: bongkaran.kamera,
       /** Layar memakainya untuk memberi tahu operator, bukan untuk logika. */
       dipakaiUlang: Boolean(draftLama),
+      tanpaResi: labelRusak,
+      catatan,
       duplikat: sebelumnya
         ? {
             tanggal: sebelumnya.date,

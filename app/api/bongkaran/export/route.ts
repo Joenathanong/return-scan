@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { handle, requireBongkaran, badRequest } from "@/lib/api";
 import { isValidDate, todayWIB } from "@/lib/date";
-import { LABEL_KONDISI, isKondisi } from "@/lib/bongkaran";
+import { LABEL_KONDISI, isKondisi, tanpaResi } from "@/lib/bongkaran";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,7 +69,9 @@ export async function GET(req: NextRequest) {
         scannedAt: true,
         bongkaran: {
           select: {
+            id: true,
             noResi: true,
+            catatan: true,
             date: true,
             scannedAt: true,
             kamera: true,
@@ -100,7 +102,15 @@ export async function GET(req: NextRequest) {
     // foreign key antara bongkaran dan scans (dan memang tidak boleh ada —
     // bongkar sah terjadi sebelum resinya tercatat di Scan Retur). Satu
     // kueri tambahan per halaman, bukan satu per baris.
-    const daftarResi = [...new Set(rows.map((r) => r.bongkaran.noResi))];
+    // Baris TANPA RESI tidak ikut ditanyakan ke tabel scans.
+    //
+    // Nomornya buatan sistem sendiri; tidak mungkin ada padanannya di Scan
+    // Retur, dan memasukkannya ke klausa IN hanya memperbesar kueri untuk
+    // mendengar jawaban yang sudah pasti. Di hari yang banyak paket rusak
+    // labelnya, ini menghemat ratusan nilai per halaman ekspor.
+    const daftarResi = [
+      ...new Set(rows.map((r) => r.bongkaran.noResi).filter((n) => !tanpaResi(n))),
+    ];
     const petaExpedisi = new Map<string, string>();
 
     // Dipotong-potong: satu klausa IN dengan 2.000 nilai membuat perencana
@@ -124,7 +134,14 @@ export async function GET(req: NextRequest) {
         // Id baris ikut dikirim supaya layar bisa menyunting baris yang
         // ganjil di tempat, tanpa perlu memuat ulang seluruh laporan.
         id: r.id,
+        /** Id INDUKNYA — dipakai layar untuk mengganti nomor resi yang
+         *  tadinya tidak terbaca, sekaligus memperbarui baris sekandung
+         *  di tabel tanpa memuat ulang seluruh laporan. */
+        bongkaranId: r.bongkaran.id,
         noResi: r.bongkaran.noResi,
+        /** Label resinya sobek/tidak terbaca — dikenali dari awalan nomor. */
+        tanpaResi: tanpaResi(r.bongkaran.noResi),
+        catatan: r.bongkaran.catatan ?? "",
         // Posisi barang di dalam resinya: urutan ke-berapa dari berapa.
         // Dikirim sebagai dua angka, bukan sebagai teks "1 of 2" — bentuk
         // tulisannya urusan layar, dan angka mentah tetap bisa difilter

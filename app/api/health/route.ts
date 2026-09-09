@@ -125,6 +125,7 @@ export async function GET() {
       const kolomWajib: { tabel: string; kolom: string; untuk: string }[] = [
         { tabel: "bongkaran", kolom: "kamera", untuk: "nomor kamera CCTV" },
         { tabel: "bongkaran", kolom: "klien_kunci", untuk: "simpan luring" },
+        { tabel: "bongkaran", kolom: "catatan", untuk: "catatan resi rusak" },
         { tabel: "users", kolom: "bisa_cancel_order", untuk: "izin Cancel Order" },
         { tabel: "produk_barcode", kolom: "jenis", untuk: "barcode BPOM" },
       ];

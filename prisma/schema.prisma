@@ -438,6 +438,16 @@ model Bongkaran {
    */
   kamera Int? @db.SmallInt
 
+  /**
+   * Catatan bebas dari operator. Terutama untuk paket yang label resinya
+   * sobek: nomor karung, sisa digit yang masih terbaca, bentuk kardusnya.
+   *
+   * NULLABLE dan opsional. Memaksanya diisi berarti memaksa operator
+   * mengetik sesuatu di layar sentuh sambil memegang cutter — dan yang
+   * diketik dalam keadaan itu adalah "-", bukan keterangan.
+   */
+  catatan String? @db.VarChar(191)
+
   scannedById String @map("scanned_by") @db.VarChar(30)
   scannedBy   User   @relation("BongkaranBy", fields: [scannedById], references: [id])
 

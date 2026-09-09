@@ -544,3 +544,77 @@ Jaring pengaman terakhir: kalau draft memang sudah hilang saat Simpan
 (404), layar mengirim ulang lewat jalur tanpa draft memakai `klienKunci`
 yang sama — barangnya tetap tersimpan, dan barisnya ditandai
 `waktu_dari_klien` supaya kelihatan bahwa jamnya tidak datang dari server.
+
+---
+
+## 14. Paket tanpa nomor resi (label sobek / tidak terbaca)
+
+Tombol **Resi rusak / tidak terbaca** di bawah kolom resi. Ditekan → nomor
+pengganti dibuat server → sisanya sama persis: scan barcode, kondisi, batch,
+Simpan.
+
+### Nomor penggantinya
+
+    TANPA-RESI-20260909-K2-142335
+                tanggal  kamera jam WIB
+
+Dipilih begini, bukan penomoran urut 001/002:
+
+- **Nol kueri.** Penomoran urut butuh `max()` setiap kali tombol ditekan.
+  Jalur ini justru dirancang lebih murah daripada scan biasa: dua kueri
+  pencocokan (cek duplikat + cari padanan di Scan Retur) memang **dilewati**,
+  karena tidak ada nomor yang bisa dicocokkan.
+- **Tidak bisa kembar tanpa indeks unik.** Kolom `no_resi` sengaja tidak
+  unik (satu resi sah datang dalam dua koli), jadi penomoran urut tidak
+  punya penjaga: dua operator yang menekan bersamaan dapat angka sama dan
+  tidak ada yang memberi tahu. Di sini kamera + detik yang membedakan.
+- **Nomornya sendiri menunjuk rekamannya:** tanggal, kamera, jam — tiga hal
+  yang justru dibutuhkan untuk membuka CCTV yang benar. Untuk baris tanpa
+  resi, ini satu-satunya jalan menelusuri asalnya.
+
+### Awalan = penanda
+
+Tidak ada kolom boolean terpisah. `AWALAN_TANPA_RESI` hanya boleh dibuat
+server: `/mulai`, `/simpan`, dan `/[id]/resi` **menolak** nomor berawalan itu
+kalau datang dari ketikan operator. Karena itu kehadiran awalan di `no_resi`
+adalah pernyataan yang bisa dipercaya, dan indeks `no_resi` yang sudah ada
+melayani semua pencariannya (`startsWith`) tanpa tambahan apa pun.
+
+### Yang hilang, dan diakui hilang
+
+Baris tanpa resi **tidak punya padanan di Scan Retur**, jadi kolom Expedisi
+selamanya kosong dan tidak ada kaitan ke pengirimnya. Karena itu:
+
+- Dialog konfirmasinya menyebutkan hal ini apa adanya sebelum ditekan.
+- Tombolnya dibuat **tenang** (tombol sekunder, teks kecil, di bawah garis).
+  Kalau menonjol, ia akan jadi jalan pintas setiap kali barcode resi susah
+  di-scan.
+- Dashboard menghitung pemakaiannya **per operator**. Kalau angkanya
+  menumpuk di satu orang, itu terlihat sebagai angka hari ini — bukan
+  ditemukan setahun lagi saat satu paket dicari dan tidak ketemu apa pun.
+- Angka "Resi tanpa ekspedisi" di ekspor **mengecualikan** baris ini: kolom
+  kosongnya bukan sesuatu yang perlu ditelusuri.
+
+### Catatan
+
+Kolom baru `bongkaran.catatan` (VarChar 191, nullable). Opsional — memaksa
+diisi berarti memaksa mengetik di layar sentuh sambil memegang cutter, dan
+yang diketik dalam keadaan itu adalah "-". Ikut ke Excel sebagai kolom
+**paling akhir, sesudah Expedisi**: kolom baru menempel di ujung supaya
+urutan yang sudah dipakai orang tidak bergeser.
+
+### Kalau resi aslinya ketemu
+
+`PATCH /api/bongkaran/[id]/resi`, admin saja, dan **satu arah saja**: dari
+nomor pengganti ke nomor sungguhan. Nomor resi baris biasa tidak bisa
+diganti dari mana pun — itu kunci ke Scan Retur, dan laporan yang nomornya
+bisa berubah belakangan tidak bisa dipakai memeriksa apa pun.
+
+Yang ikut terjadi: seluruh baris barang dalam resi itu berpindah nomor
+(nomor milik induknya), kolom Expedisi terisi sendiri kalau padanannya ada,
+jam scan **tidak** berubah, dan jejaknya masuk audit log. Kalau nomor baru
+tidak ketemu di Scan Retur, layar mengatakannya saat itu juga — bukan
+membiarkannya ditemukan sebagai kolom kosong sebulan kemudian.
+
+> **Butuh `npm run db:push`.** Kolom `catatan` baru; tanpa push, penyimpanan
+> hasil scan akan gagal. `/api/health` sudah ikut memeriksa kolom ini.

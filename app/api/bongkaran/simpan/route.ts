@@ -5,7 +5,9 @@ import {
 } from "@/lib/api";
 import { todayWIB } from "@/lib/date";
 import {
-  periksaItem, isKondisi, butuhBarcode, bacaBatch, isKamera, type ItemMasuk,
+  periksaItem, isKondisi, butuhBarcode, bacaBatch, isKamera,
+  nomorTanpaResi, tanpaResi, AWALAN_TANPA_RESI, CATATAN_MAKS,
+  type ItemMasuk,
 } from "@/lib/bongkaran";
 import { bersihkanKode, bersihkanNama } from "@/lib/produk";
 
@@ -29,6 +31,9 @@ interface Badan {
   klienKunci?: string;
   /** Nomor kamera CCTV, hanya dipakai di jalur luring. */
   kamera?: number;
+  /** Label resi sobek / tidak terbaca — nomornya dibuat server. */
+  tanpaResi?: boolean;
+  catatan?: string;
   items?: ItemMasuk[];
 }
 
@@ -97,9 +102,21 @@ export async function POST(req: NextRequest) {
       }
       induk = draft;
     } else {
-      const noResi = cleanResi(body.noResi);
-      if (!noResi) throw badRequest("Nomor resi wajib diisi.");
-      if (noResi.length > 64) throw badRequest("Nomor resi terlalu panjang.");
+      const labelRusak = body.tanpaResi === true;
+
+      let noResi = "";
+      if (!labelRusak) {
+        noResi = cleanResi(body.noResi);
+        if (!noResi) throw badRequest("Nomor resi wajib diisi.");
+        if (noResi.length > 64) throw badRequest("Nomor resi terlalu panjang.");
+
+        // Sama seperti di /mulai: awalan ini hanya boleh lahir dari server.
+        if (tanpaResi(noResi)) {
+          throw badRequest(
+            `Nomor resi tidak boleh diawali "${AWALAN_TANPA_RESI}".`
+          );
+        }
+      }
 
       const jam = new Date(String(body.scannedAtKlien ?? ""));
       if (Number.isNaN(jam.getTime())) {
@@ -113,6 +130,21 @@ export async function POST(req: NextRequest) {
       if (!isKamera(kameraLuring)) {
         throw badRequest("Nomor kamera belum dipilih. Pilih kamera dulu di layar Bongkaran.");
       }
+
+      /*
+        Nomor pengganti dibuat dari `jam` — waktu scan yang benar-benar
+        tersimpan di baris ini — bukan dari jam server saat Simpan ditekan.
+
+        Kalau dibuat dari jam server, nomornya akan menunjuk menit ketika
+        operator menekan Simpan, sementara kolom `scanned_at` menunjuk menit
+        ketika paketnya dibuka. Untuk baris tanpa resi, keduanya harus sama:
+        nomor itulah satu-satunya petunjuk mencari rekaman CCTV-nya, dan
+        petunjuk yang menunjuk menit yang salah lebih buruk daripada tidak
+        ada petunjuk.
+      */
+      if (labelRusak) noResi = nomorTanpaResi(kameraLuring, jam);
+
+      const catatan = bersihkanNama(body.catatan).slice(0, CATATAN_MAKS) || null;
 
       // Kiriman ulang setelah balasan hilang di jaringan: kembalikan hasil
       // yang SUDAH tersimpan, jangan buat resi kedua. Tanpa ini, duplikatnya
@@ -147,6 +179,7 @@ export async function POST(req: NextRequest) {
             waktuDariKlien: true,
             klienKunci,
             kamera: kameraLuring,
+            catatan,
             scannedById: me.id,
             // Tanggal bisnis tetap dihitung SERVER dari jam server, bukan dari
             // jam klien: kalau tidak, PDT yang tanggalnya salah akan

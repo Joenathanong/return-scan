@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import { mintaJson, pesanError, HttpError } from "@/lib/http";
 import {
   KONDISI, LABEL_KONDISI, butuhBarcode, bacaBatch, periksaItem,
-  KAMERA, isKamera, type NomorKamera, type Kondisi, type ItemMasuk,
+  KAMERA, isKamera, CATATAN_MAKS,
+  type NomorKamera, type Kondisi, type ItemMasuk,
 } from "@/lib/bongkaran";
 import {
   simpanAmplop, bacaAmplop, hapusAmplop, UMUR_SESI_JAM,
@@ -20,7 +21,7 @@ import { bersihkanKode } from "@/lib/produk";
 import {
   PackageOpen, Loader2, AlertCircle, CheckCircle2, X, Plus, Trash2,
   RefreshCw, ScanLine, Clock, WifiOff, Info, ChevronDown, Video, Repeat2,
-  RotateCcw,
+  RotateCcw, FileWarning,
 } from "lucide-react";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -79,6 +80,16 @@ interface Sesi {
    * jaringan) tidak menghasilkan dua resi. Lihat catatan di schema.prisma.
    */
   klienKunci: string;
+  /**
+   * Paket yang label resinya sobek / tidak terbaca.
+   *
+   * Nomor penggantinya dibuat SERVER (dari tanggal, kamera, dan jam WIB),
+   * jadi di jalur luring `noResi` di sini masih kosong sampai Simpan
+   * berhasil — layar menampilkan penanda, bukan nomor karangan.
+   */
+  tanpaResi: boolean;
+  /** Catatan opsional, terutama untuk paket tanpa resi. */
+  catatan: string;
 }
 
 /** Id acak sederhana — tidak perlu kriptografis, hanya perlu tidak kembar. */
@@ -102,7 +113,7 @@ function kunciAcak(): string {
  * Naikkan angka ini setiap kali bentuk `Item` atau `Sesi` berubah.
  * Simpanan berversi lain dibuang, tidak ditebak-tebak isinya.
  */
-const VERSI_SIMPANAN = 1;
+const VERSI_SIMPANAN = 2;
 
 interface Simpanan {
   kamera: NomorKamera | null;
@@ -126,6 +137,8 @@ function sahSimpanan(v: unknown): v is Simpanan {
   if (typeof sesi.t0 !== "number" || !Number.isFinite(sesi.t0)) return false;
   if (sesi.id !== null && typeof sesi.id !== "string") return false;
   if (typeof sesi.klienKunci !== "string") return false;
+  if (typeof sesi.tanpaResi !== "boolean") return false;
+  if (typeof sesi.catatan !== "string") return false;
 
   if (!Array.isArray(s.items) || s.items.length === 0) return false;
   const itemSah = s.items.every(
@@ -355,6 +368,10 @@ function Isi() {
      ─────────────────────────────────────────────────────────────────── */
   const [dipulihkan, setDipulihkan] = useState(false);
 
+  /** Dialog konfirmasi "resi rusak / tidak terbaca". */
+  const [tanyaTanpaResi, setTanyaTanpaResi] = useState(false);
+  const [catatanRusak, setCatatanRusak] = useState("");
+
   /** Baru boleh menulis simpanan SESUDAH percobaan pemulihan selesai.
    *  Tanpa penanda ini, render pertama (sesi masih null) akan menghapus
    *  simpanan yang justru hendak dipulihkan. */
@@ -406,9 +423,14 @@ function Isi() {
     };
   }, []);
 
-  const mulai = async () => {
-    const kode = resi.replace(/\s+/g, "").toUpperCase();
-    if (!kode || memulai) return;
+  const mulai = async (opsi?: { labelRusak?: boolean; catatan?: string }) => {
+    const labelRusak = opsi?.labelRusak === true;
+    const catatan = (opsi?.catatan ?? "").trim().slice(0, CATATAN_MAKS);
+
+    // Tanpa resi: tidak ada yang perlu diketik, jadi kolom resi tidak
+    // diperiksa sama sekali.
+    const kode = labelRusak ? "" : resi.replace(/\s+/g, "").toUpperCase();
+    if ((!kode && !labelRusak) || memulai) return;
     setMemulai(true);
     setError("");
 
@@ -441,8 +463,11 @@ function Isi() {
       const d = await mintaJson<{
         id: string; noResi: string; scannedAt: string; dipakaiUlang?: boolean;
         duplikat: Sesi["duplikat"]; retur: Sesi["retur"];
-      }>("/api/bongkaran/mulai",
-        { method: "POST", body: { noResi: kode, kamera }, timeoutMs: 15_000 });
+      }>("/api/bongkaran/mulai", {
+        method: "POST",
+        body: { noResi: kode, kamera, tanpaResi: labelRusak, catatan },
+        timeoutMs: 15_000,
+      });
 
       // t0 disetel ULANG di sini, bukan dipakai apa adanya dari sebelum
       // permintaan: server menulis `scannedAt` saat permintaan TIBA, jadi
@@ -452,7 +477,7 @@ function Isi() {
       sesiBaru = {
         id: d.id, noResi: d.noResi, scannedAt: d.scannedAt,
         luring: false, t0: Date.now(), duplikat: d.duplikat, retur: d.retur,
-        klienKunci: kunciAcak(),
+        klienKunci: kunciAcak(), tanpaResi: labelRusak, catatan,
       };
 
       // Bukan sekadar keterangan: kalau operator melihat resi ini di panel
@@ -472,9 +497,14 @@ function Isi() {
         // Benar-benar tidak ada balasan — jangan hentikan operator.
         console.error("[bongkaran] /mulai tidak terjawab, lanjut luring:", e);
         sesiBaru = {
+          // Nomor pengganti TIDAK dibuat di sini walaupun rumusnya ada di
+          // lib yang sama. Nomor itu harus lahir dari satu tempat saja;
+          // klien yang membuatnya sendiri akan memakai jam PDT, dan untuk
+          // baris tanpa resi jam itulah satu-satunya jalan menemukan
+          // rekamannya. Server yang membuatnya saat Simpan.
           id: null, noResi: kode, scannedAt: new Date(t0).toISOString(),
           luring: true, t0, duplikat: null, retur: null,
-          klienKunci: kunciAcak(),
+          klienKunci: kunciAcak(), tanpaResi: labelRusak, catatan,
         };
       } else {
         console.error("[bongkaran] /mulai ditolak server:", e);
@@ -573,6 +603,8 @@ function Isi() {
         scannedAtKlien: sesi.scannedAt,
         klienKunci: sesi.klienKunci,
         kamera,
+        tanpaResi: sesi.tanpaResi,
+        catatan: sesi.catatan,
         items: muatan,
       });
 
@@ -832,6 +864,67 @@ function Isi() {
       {/* ── Kolom utama ── */}
       <div className="space-y-5 min-w-0 xl:col-start-1 xl:row-start-1">
 
+      {/* ── Konfirmasi paket tanpa resi ── */}
+      {tanyaTanpaResi && (
+        <div className="card p-5 space-y-3 border-warn/40 bg-warn-bg/40">
+          <div className="flex items-center gap-2">
+            <FileWarning className="w-5 h-5 text-warn" />
+            <h2 className="font-semibold text-heading">Paket tanpa nomor resi</h2>
+          </div>
+          <p className="text-sm text-ink">
+            Sistem akan membuatkan nomor pengganti dari tanggal, kamera{" "}
+            {kamera ?? "—"}, dan jam sekarang. Sesudah itu prosesnya sama persis:
+            scan barcode, kondisi, batch, lalu Simpan.
+          </p>
+          <p className="text-xs text-gray-600">
+            Yang hilang: baris ini tidak akan punya padanan di Scan Retur, jadi
+            kolom Expedisi-nya kosong dan tidak ada cara menghubungkannya ke
+            pengirim. Pakai ini hanya kalau nomornya benar-benar tidak terbaca —
+            bukan karena barcode resinya susah di-scan.
+          </p>
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1.5 block">
+              Catatan <span className="text-gray-400 font-normal">(opsional, sangat membantu)</span>
+            </label>
+            <input
+              value={catatanRusak}
+              onChange={(e) => setCatatanRusak(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  setTanyaTanpaResi(false);
+                  mulai({ labelRusak: true, catatan: catatanRusak });
+                }
+              }}
+              className="input-field"
+              maxLength={CATATAN_MAKS}
+              placeholder="Mis. karung 7, label sobek, sisa digit …4821"
+              autoFocus
+            />
+            <p className="mt-1.5 text-xs text-gray-400">
+              Ikut terbawa ke Excel di kolom paling akhir. Sisa digit yang masih
+              terbaca sering cukup untuk menemukan resinya kembali nanti.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setTanyaTanpaResi(false);
+                mulai({ labelRusak: true, catatan: catatanRusak });
+              }}
+              disabled={memulai}
+              className="btn-primary text-sm"
+            >
+              {memulai ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Lanjut tanpa resi
+            </button>
+            <button onClick={() => setTanyaTanpaResi(false)} className="btn-ghost text-sm">
+              Batal
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Langkah 1: resi ── */}
       {!sesi ? (
         <div className="card p-5 space-y-3">
@@ -850,7 +943,7 @@ function Isi() {
                 disabled={memulai}
               />
             </div>
-            <button onClick={mulai} disabled={!resi.trim() || memulai} className="btn-primary">
+            <button onClick={() => mulai()} disabled={!resi.trim() || memulai} className="btn-primary">
               {memulai ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Mulai
             </button>
@@ -858,6 +951,27 @@ function Isi() {
           <p className="text-xs text-gray-400">
             Waktu scan dicatat saat resi ini masuk, bukan saat Simpan ditekan.
           </p>
+
+          {/*
+            JALAN KELUAR untuk label yang sobek / tidak terbaca.
+
+            Ditaruh di bawah kolom resi dan dibuat tenang (tombol sekunder,
+            bukan warna aksi): ini bukan pilihan yang setara dengan men-scan
+            resi. Kalau tampilannya sama menonjol, ia akan jadi jalan pintas
+            setiap kali barcode resi susah terbaca — dan setiap kali itu
+            dipakai, satu paket kehilangan kaitannya ke Scan Retur, ke
+            ekspedisi, dan ke pengirimnya.
+          */}
+          <div className="pt-1 border-t border-gray-200">
+            <button
+              onClick={() => { setCatatanRusak(""); setTanyaTanpaResi(true); }}
+              disabled={memulai}
+              className="btn-ghost text-xs text-gray-500 hover:text-brand-700"
+            >
+              <FileWarning className="w-3.5 h-3.5" />
+              Resi rusak / tidak terbaca
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -920,8 +1034,17 @@ function KepalaSesi({ sesi, onBatal }: { sesi: Sesi; onBatal: () => void }) {
     <div className="card p-4 space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          {sesi.tanpaResi && (
+            <span className="badge-warning inline-flex items-center gap-1 mb-1">
+              <FileWarning className="w-3 h-3" /> Tanpa resi
+            </span>
+          )}
           <p className="font-mono text-lg font-semibold text-heading truncate">
-            {sesi.noResi}
+            {/* Di jalur luring nomor penggantinya baru dibuat server saat
+                Simpan, jadi di layar belum ada apa-apa. Ditulis apa adanya,
+                bukan ditebak — nomor karangan di layar akan berbeda dari
+                nomor yang benar-benar tersimpan. */}
+            {sesi.noResi || "(nomor dibuat saat disimpan)"}
           </p>
           <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
             <Clock className="w-3.5 h-3.5" />
@@ -943,6 +1066,12 @@ function KepalaSesi({ sesi, onBatal }: { sesi: Sesi; onBatal: () => void }) {
         </p>
       )}
 
+      {sesi.catatan && (
+        <p className="text-xs text-gray-600 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2">
+          Catatan: {sesi.catatan}
+        </p>
+      )}
+
       {sesi.duplikat && (
         <p className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800 flex gap-2">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -958,7 +1087,7 @@ function KepalaSesi({ sesi, onBatal }: { sesi: Sesi; onBatal: () => void }) {
           Cocok dengan Scan Retur — {sesi.retur.expedisi}, karung {sesi.retur.karung},{" "}
           {sesi.retur.tanggal}.
         </p>
-      ) : !sesi.luring ? (
+      ) : !sesi.luring && !sesi.tanpaResi ? (
         <p className="text-xs text-gray-400 flex gap-2">
           <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           Belum ada di Scan Retur. Bukan masalah — bongkar boleh mendahului scan retur.

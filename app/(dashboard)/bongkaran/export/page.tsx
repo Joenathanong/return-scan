@@ -2,20 +2,27 @@
 
 import { useState } from "react";
 import AuthGuard from "@/components/AuthGuard";
+import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { mintaJson, pesanError } from "@/lib/http";
 import {
-  Loader2, AlertCircle, CheckCircle2, X, Download, Pencil, Save,
+  Loader2, AlertCircle, CheckCircle2, X, Download, Pencil, Save, FileWarning,
 } from "lucide-react";
 import {
-  KONDISI, LABEL_KONDISI, butuhBarcode, bacaBatch, isKondisi, type Kondisi,
+  KONDISI, LABEL_KONDISI, butuhBarcode, bacaBatch, isKondisi, CATATAN_MAKS,
+  type Kondisi,
 } from "@/lib/bongkaran";
 import { bersihkanKode } from "@/lib/produk";
 
 interface Baris {
   /** Id baris — dipakai dialog koreksi untuk menyunting di tempat. */
   id: string;
+  /** Id induknya — satu resi bisa punya banyak baris di tabel ini. */
+  bongkaranId: string;
   noResi: string;
+  /** Label resinya sobek/tidak terbaca; nomornya buatan sistem. */
+  tanpaResi: boolean;
+  catatan: string;
   /** Posisi barang di dalam resinya. */
   urutan: number;
   totalBaris: number;
@@ -78,6 +85,10 @@ const KOLOM: { judul: string; kelas?: string }[] = [
   { judul: "Scan Date" },
   { judul: "Kamera" },
   { judul: "Expedisi" },
+  // Catatan sengaja SESUDAH Expedisi: urutan kolom yang sudah dipakai orang
+  // untuk menyalin ke tempat lain tidak boleh bergeser hanya karena ada
+  // kolom baru. Kolom baru menempel di ujung.
+  { judul: "Catatan" },
 ];
 
 interface Balasan {
@@ -124,6 +135,9 @@ export default function BongkaranExportPage() {
 }
 
 function Isi() {
+  const { appUser } = useAuth();
+  const isAdmin = appUser?.role === "admin";
+
   const [dari, setDari] = useState(hariIniWIB);
   const [sampai, setSampai] = useState(hariIniWIB);
   const [rows, setRows] = useState<Baris[] | null>(null);
@@ -196,6 +210,9 @@ function Isi() {
         // kolom lain yang tidak terisi, supaya sel kosong di Excel selalu
         // berarti "belum diisi" dan bukan "tidak ada padanannya".
         "Expedisi": r.expedisi || "—",
+        // Kolom paling akhir, sesudah Expedisi: kolom baru menempel di
+        // ujung supaya urutan yang sudah dipakai orang tidak bergeser.
+        "Catatan": r.catatan || "—",
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);
@@ -203,6 +220,7 @@ function Isi() {
         { wch: 5 }, { wch: 20 }, { wch: 8 }, { wch: 18 }, { wch: 14 },
         { wch: 34 }, { wch: 9 }, { wch: 15 }, { wch: 26 }, { wch: 12 },
         { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 11 }, { wch: 18 },
+        { wch: 28 },
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Bongkaran");
@@ -218,8 +236,18 @@ function Isi() {
   // Dihitung per RESI, bukan per baris: satu resi berisi lima barang yang
   // tidak ketemu di Scan Retur adalah SATU resi yang perlu ditelusuri,
   // bukan lima.
+  //
+  // Baris TANPA RESI dikecualikan: kolom Expedisi-nya kosong bukan karena
+  // ada yang perlu ditelusuri, melainkan karena memang tidak ada nomor yang
+  // bisa dicocokkan. Mencampurnya akan membuat angka ini naik setiap kali
+  // tombol "resi rusak" dipakai, dan orang berhenti mempercayainya.
   const resiTanpaExpedisi = rows
-    ? new Set(rows.filter((r) => !r.expedisi).map((r) => r.noResi)).size
+    ? new Set(
+        rows.filter((r) => !r.expedisi && !r.tanpaResi).map((r) => r.noResi)
+      ).size
+    : 0;
+  const resiTanpaNomor = rows
+    ? new Set(rows.filter((r) => r.tanpaResi).map((r) => r.noResi)).size
     : 0;
 
   return (
@@ -273,6 +301,20 @@ function Isi() {
             <Angka label="Barcode belum terdaftar" nilai={tidakDikenal} />
             <Angka label="Resi tanpa ekspedisi" nilai={resiTanpaExpedisi} />
           </div>
+
+          {resiTanpaNomor > 0 && (
+            <div className="bg-warn-bg/60 border border-warn/30 rounded-xl px-4 py-3 flex gap-2.5 text-sm">
+              <FileWarning className="w-4 h-4 flex-shrink-0 mt-0.5 text-warn" />
+              <p className="text-ink">
+                {resiTanpaNomor.toLocaleString("id-ID")} paket dibongkar tanpa nomor
+                resi (label sobek / tidak terbaca). Nomornya dibuat sistem dari
+                tanggal, kamera, dan jam.{" "}
+                {isAdmin
+                  ? "Kalau resi aslinya ketemu, isikan lewat ikon pensil di baris yang bersangkutan."
+                  : "Kalau resi aslinya ketemu, admin bisa mengisikannya."}
+              </p>
+            </div>
+          )}
 
           {resiTanpaExpedisi > 0 && (
             <div className="bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 flex gap-2.5 text-sm text-gray-600">
@@ -333,7 +375,18 @@ function Isi() {
                         </button>
                       </td>
                       <td className="px-3 py-2 text-gray-400 text-right tabular-nums">{i + 1}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{r.noResi}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {r.tanpaResi ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="badge-warning inline-flex items-center gap-1">
+                              <FileWarning className="w-3 h-3" /> tanpa resi
+                            </span>
+                            <span className="text-gray-400">{r.noResi}</span>
+                          </span>
+                        ) : (
+                          r.noResi
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-xs text-gray-500 tabular-nums text-center">
                         {line(r.urutan, r.totalBaris)}
                       </td>
@@ -351,7 +404,13 @@ function Isi() {
                         {r.kamera ? `Kamera ${r.kamera}` : "—"}
                       </td>
                       <td className={cn("px-3 py-2", !r.expedisi && "text-gray-300")}>
-                        {r.expedisi || "—"}
+                        {/* Baris tanpa resi memang tidak mungkin punya
+                            padanan; ditulis begitu, bukan dibiarkan kosong
+                            seperti resi yang padanannya belum ketemu. */}
+                        {r.expedisi || (r.tanpaResi ? "(tanpa resi)" : "—")}
+                      </td>
+                      <td className={cn("px-3 py-2", !r.catatan && "text-gray-300")}>
+                        {r.catatan || "—"}
                       </td>
                     </tr>
                   ))}
@@ -371,6 +430,23 @@ function Isi() {
       {sunting && (
         <DialogSunting
           baris={sunting}
+          isAdmin={isAdmin}
+          onIsiResi={(bongkaranId, noResi, catatan, expedisi, pesan) => {
+            // SEMUA baris resi ini ikut berubah, bukan hanya baris yang
+            // dialognya dibuka: nomor resi milik induknya, dan satu resi
+            // bisa punya sepuluh baris barang di tabel yang sama. Kalau
+            // hanya satu yang diperbarui, layar akan menampilkan satu resi
+            // dengan dua nomor berbeda sampai laporannya dimuat ulang.
+            setRows((arr) =>
+              (arr ?? []).map((x) =>
+                x.bongkaranId === bongkaranId
+                  ? { ...x, noResi, catatan, expedisi, tanpaResi: false }
+                  : x
+              )
+            );
+            setSunting(null);
+            setInfo(pesan);
+          }}
           onTutup={() => setSunting(null)}
           onSimpan={(baru, pesan) => {
             // Baris diperbarui DI TEMPAT, tidak dengan memuat ulang seluruh
@@ -393,11 +469,16 @@ function Isi() {
    ══════════════════════════════════════════════════════════════════════════ */
 
 function DialogSunting({
-  baris, onTutup, onSimpan, onError,
+  baris, isAdmin, onTutup, onSimpan, onIsiResi, onError,
 }: {
   baris: Baris;
+  isAdmin: boolean;
   onTutup: () => void;
   onSimpan: (baru: Baris, pesan: string) => void;
+  onIsiResi: (
+    bongkaranId: string, noResi: string, catatan: string,
+    expedisi: string, pesan: string
+  ) => void;
   onError: (pesan: string) => void;
 }) {
   const awal: Kondisi = isKondisi(baris.kondisiKode) ? baris.kondisiKode : "BAGUS";
@@ -412,6 +493,30 @@ function DialogSunting({
   const [edDate, setEdDate] = useState(baris.edDate);
   const [edOtomatis, setEdOtomatis] = useState(baris.edOtomatis);
   const [menyimpan, setMenyimpan] = useState(false);
+
+  /* ── Mengisi nomor resi yang tadinya tidak terbaca ──────────────────── */
+  const [resiAsli, setResiAsli] = useState("");
+  const [catatanBaru, setCatatanBaru] = useState(baris.catatan);
+  const [mengisiResi, setMengisiResi] = useState(false);
+
+  const isiResi = async () => {
+    const kode = resiAsli.replace(/\s+/g, "").toUpperCase();
+    if (!kode) return;
+    setMengisiResi(true);
+    try {
+      const r = await mintaJson<{
+        noResi: string; catatan: string; expedisi: string; pesan: string;
+      }>(`/api/bongkaran/${baris.bongkaranId}/resi`, {
+        method: "PATCH",
+        body: { noResi: kode, catatan: catatanBaru },
+      });
+      onIsiResi(baris.bongkaranId, r.noResi, r.catatan, r.expedisi, r.pesan);
+    } catch (e) {
+      onError(pesanError(e, "Gagal mengisi nomor resi."));
+    } finally {
+      setMengisiResi(false);
+    }
+  };
 
   const perluBarcode = butuhBarcode(kondisi);
 
@@ -570,6 +675,58 @@ function DialogSunting({
           </button>
           <button onClick={onTutup} className="btn-ghost">Batal</button>
         </div>
+
+        {/*
+          MENGISI NOMOR RESI YANG TADINYA TIDAK TERBACA.
+
+          Dipisahkan dari tombol Simpan di atas, dengan garis dan tombolnya
+          sendiri, karena yang diubah bukan baris ini melainkan INDUKNYA —
+          seluruh barang dalam resi yang sama ikut berpindah nomor. Satu
+          tombol yang diam-diam melakukan dua hal berbeda adalah tombol yang
+          cepat atau lambat ditekan untuk alasan yang salah.
+
+          Hanya muncul untuk baris tanpa resi, dan hanya untuk admin. Nomor
+          resi baris biasa tidak bisa diganti dari mana pun — itu kunci ke
+          Scan Retur, dan laporan yang nomornya bisa berubah belakangan
+          adalah laporan yang tidak bisa dipakai memeriksa apa pun.
+        */}
+        {baris.tanpaResi && isAdmin && (
+          <div className="pt-3 mt-1 border-t border-gray-200 space-y-2">
+            <div className="flex items-center gap-2">
+              <FileWarning className="w-4 h-4 text-warn" />
+              <p className="text-sm font-medium text-ink">Resi aslinya sudah ketemu?</p>
+            </div>
+            <p className="text-xs text-gray-500">
+              Nomor sekarang <span className="font-mono">{baris.noResi}</span> dibuat
+              sistem. Mengisinya akan mengubah SELURUH barang dalam resi ini, dan
+              kolom Expedisi terisi sendiri kalau nomornya ada di Scan Retur. Jam
+              scan tidak ikut berubah.
+            </p>
+            <input
+              value={resiAsli}
+              onChange={(e) => setResiAsli(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); isiResi(); } }}
+              className="input-field font-mono"
+              placeholder="Scan atau ketik nomor resi sebenarnya…"
+              autoComplete="off"
+            />
+            <input
+              value={catatanBaru}
+              onChange={(e) => setCatatanBaru(e.target.value)}
+              className="input-field"
+              maxLength={CATATAN_MAKS}
+              placeholder="Catatan (opsional)"
+            />
+            <button
+              onClick={isiResi}
+              disabled={!resiAsli.trim() || mengisiResi}
+              className="btn-secondary w-full justify-center disabled:opacity-40"
+            >
+              {mengisiResi && <Loader2 className="w-4 h-4 animate-spin" />}
+              Isikan nomor resi ini
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
