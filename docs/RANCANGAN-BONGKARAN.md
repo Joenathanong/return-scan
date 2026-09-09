@@ -473,3 +473,74 @@ Urutan eksekusi: **(1)** skema + login 1 perangkat + Master Produk & impor
 Excel → **(2)** halaman scan + cache → **(3)** dashboard + export.
 
 **Status: ketiganya selesai dan sudah terpasang.**
+
+---
+
+## 13. Sesi terputus dan umur draft
+
+Ditambahkan setelah panel **Belum selesai** di dashboard penuh terus.
+
+### Kenapa draft menumpuk
+
+Satu baris `bongkaran` berstatus `draft` lahir pada detik resi di-scan —
+itu konsekuensi langsung dari keputusan §4 (stempel waktu saat scan, bukan
+saat save), dan keputusan itu tidak berubah. Artinya **setiap sesi yang
+tidak selesai meninggalkan satu baris**, dan sesi bisa tidak selesai karena
+banyak hal yang wajar di gudang: PDT mati, layar di-refresh, operator
+pindah menu, jaringan putus saat Simpan, atau resi di-scan lalu ternyata
+kolinya dibongkar orang lain.
+
+Sebelum ini tidak ada satu pun yang membersihkannya, dan dashboard
+menampilkan **seluruh** draft sepanjang masa (tanpa batas tanggal, `take:
+50`). Dua atau tiga sesi terputus per hari sudah cukup membuat daftar itu
+selalu penuh — dan daftar yang selalu penuh sama tidak bergunanya dengan
+daftar yang tidak ada.
+
+Draft itu sendiri hampir selalu **kosong**: barang dan status `final`
+ditulis dalam satu transaksi, jadi tidak ada keadaan "setengah tersimpan".
+Yang hilang saat sesi terputus bukan data di server, melainkan **keranjang
+di layar** — dan itulah yang mahal, karena kardusnya harus dibongkar ulang.
+
+### Tiga lapis penanganan
+
+| Lapis | Di mana | Biaya TiDB |
+|---|---|---|
+| 1. Pemulihan keranjang | localStorage di PDT | **nol** |
+| 2. Pakai ulang draft | `/api/bongkaran/mulai` | **nol tambahan** |
+| 3. Sapu draft basi | menumpang `/api/bongkaran/dashboard` | ≤3 kueri per jam |
+
+**1 — Pemulihan.** Sesi aktif (id draft, jam scan dari server, nomor kamera,
+seluruh kartu barang) ditulis ke `localStorage` dengan penundaan 400 ms,
+dan ditulis serentak saat `pagehide`/`visibilitychange`/pindah menu. Saat
+halaman scan dibuka lagi, sesi itu dipulihkan beserta id draft-nya —
+sehingga Simpan **menyelesaikan baris yang sama**, bukan membuat baris
+kedua. Operator diberi tahu lewat spanduk, tidak dipulihkan diam-diam.
+Umur simpanan 8 jam (`UMUR_SESI_JAM`).
+
+**2 — Pakai ulang.** Kalau resi yang sama di-scan lagi oleh operator yang
+sama sementara draft lamanya masih ada dan kosong, draft itu **di-update**
+(jam scan disetel ke sekarang), bukan ditambah baris baru. Kueri tidak
+bertambah: `findFirst` untuk cek duplikat diganti `findMany` yang menjawab
+dua pertanyaan sekaligus. Draft yang **ada isinya** tidak pernah dipakai
+ulang — itu harus dilihat manusia lewat "Lihat isi".
+
+**3 — Sapu.** Draft kosong yang lebih tua dari 12 jam (`UMUR_DRAFT_SAPU_JAM`)
+dihapus. Jalannya menumpang permintaan dashboard, dibatasi sekali per jam
+per instance, memeriksa maksimal 500 baris, dan **memastikan dulu draft-nya
+benar-benar kosong** sebelum menghapus (`draftKosong()`), bukan percaya
+pada "seharusnya kosong". Admin bisa memicunya manual lewat tombol
+**Bersihkan**.
+
+### Dua ambang yang tidak boleh terbalik
+
+    UMUR_SESI_JAM (8)  <  UMUR_DRAFT_SAPU_JAM (12)
+
+Kalau terbalik, layar akan menawarkan memulihkan sesi yang draft-nya sudah
+disapu, dan Simpan-nya gagal "draft tidak ditemukan" — tepat pada keranjang
+yang tadi ditawarkan untuk diselamatkan. Hubungan ini **diuji**, bukan
+sekadar ditulis di komentar.
+
+Jaring pengaman terakhir: kalau draft memang sudah hilang saat Simpan
+(404), layar mengirim ulang lewat jalur tanpa draft memakai `klienKunci`
+yang sama — barangnya tetap tersimpan, dan barisnya ditandai
+`waktu_dari_klien` supaya kelihatan bahwa jamnya tidak datang dari server.

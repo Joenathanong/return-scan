@@ -50,15 +50,33 @@ export async function POST(req: NextRequest) {
       throw badRequest("Nomor kamera belum dipilih. Pilih kamera dulu di layar Bongkaran.");
     }
 
-    const [sebelumnya, diScanRetur] = await Promise.all([
-      prisma.bongkaran.findFirst({
-        where: { noResi, status: "final" },
+    /*
+      SATU kueri untuk dua pertanyaan sekaligus:
+
+        • pernahkah resi ini SELESAI dibongkar (peringatan duplikat), dan
+        • apakah operator ini masih punya DRAFT tertinggal untuk resi yang
+          sama (dipakai ulang, bukan ditumpuk).
+
+      Sebelumnya hanya pertanyaan pertama yang ditanyakan, dan setiap scan
+      selalu membuat baris baru. Akibatnya: resi yang gagal disimpan lalu
+      di-scan ulang meninggalkan satu draft kosong PER PERCOBAAN, dan
+      panel "Belum selesai" di dashboard menjadi tumpukan yang tak pernah
+      berkurang. Menambah cabang di sini tidak menambah kueri — `findMany`
+      menggantikan `findFirst` yang tadinya sudah ada.
+    */
+    const [riwayat, diScanRetur] = await Promise.all([
+      prisma.bongkaran.findMany({
+        where: {
+          noResi,
+          OR: [{ status: "final" }, { status: "draft", scannedById: me.id }],
+        },
         select: {
-          id: true, scannedAt: true, date: true,
+          id: true, scannedAt: true, date: true, status: true, scannedById: true,
           scannedBy: { select: { name: true } },
           _count: { select: { items: true } },
         },
         orderBy: { scannedAt: "desc" },
+        take: 10,
       }),
       prisma.scan.findFirst({
         where: { noResi, status: "success" },
@@ -70,18 +88,47 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
+    const sebelumnya = riwayat.find((r) => r.status === "final") ?? null;
+
+    /*
+      Draft yang boleh dipakai ulang: milik operator ini, masih berstatus
+      draft, dan BENAR-BENAR KOSONG. Yang ada isinya sengaja dilewati —
+      barang yang sudah tercatat di sana harus dilihat manusia lewat panel
+      dashboard ("Lihat isi" lalu Simpan), bukan diam-diam ditimpa oleh
+      sesi baru yang jam scan-nya berbeda.
+    */
+    const draftLama =
+      riwayat.find(
+        (r) => r.status === "draft" && r.scannedById === me.id && r._count.items === 0
+      ) ?? null;
+
     const scannedAt = new Date();
-    const bongkaran = await prisma.bongkaran.create({
-      data: {
-        noResi,
-        scannedAt,
-        kamera,
-        scannedById: me.id,
-        date: todayWIB(),
-        status: "draft",
-      },
-      select: { id: true, noResi: true, scannedAt: true, date: true, kamera: true },
-    });
+
+    // Dipakai ulang = update, bukan create. Jumlah kueri tetap satu, dan
+    // barisnya tetap satu — inilah bedanya dengan sebelumnya.
+    //
+    // `scannedAt` DIPERBARUI ke sekarang, bukan dipertahankan dari scan
+    // yang gagal tadi. Jam scan adalah waktu barang ini benar-benar mulai
+    // dibongkar; mempertahankan jam lama akan melaporkan pekerjaan pukul
+    // sepuluh sebagai pekerjaan pukul delapan, dan membuat pencarian
+    // rekaman CCTV meleset ke jam yang layarnya kosong.
+    const bongkaran = draftLama
+      ? await prisma.bongkaran.update({
+          where: { id: draftLama.id },
+          data: { scannedAt, kamera, date: todayWIB() },
+          select: { id: true, noResi: true, scannedAt: true, date: true, kamera: true },
+        })
+      : await prisma.bongkaran.create({
+          data: {
+            noResi,
+            scannedAt,
+            kamera,
+            scannedById: me.id,
+            date: todayWIB(),
+            status: "draft",
+          },
+          select: { id: true, noResi: true, scannedAt: true, date: true, kamera: true },
+        });
 
     return {
       id: bongkaran.id,
@@ -89,6 +136,8 @@ export async function POST(req: NextRequest) {
       scannedAt: bongkaran.scannedAt.toISOString(),
       date: bongkaran.date,
       kamera: bongkaran.kamera,
+      /** Layar memakainya untuk memberi tahu operator, bukan untuk logika. */
+      dipakaiUlang: Boolean(draftLama),
       duplikat: sebelumnya
         ? {
             tanggal: sebelumnya.date,

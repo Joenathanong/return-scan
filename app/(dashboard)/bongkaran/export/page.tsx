@@ -52,6 +52,34 @@ function line(urutan: number, total: number): string {
   return `${urutan} of ${total}`;
 }
 
+/**
+ * Kolom tabel pratinjau: judul + perataan, satu sumber untuk keduanya.
+ *
+ * JUMLAHNYA HARUS SAMA PERSIS dengan jumlah <td> di setiap baris (16,
+ * termasuk kolom ikon pensil yang judulnya sengaja kosong). Kalau nanti
+ * ada kolom baru, tambahkan di SINI dan di baris tabelnya sekaligus —
+ * pergeseran satu kolom membuat setiap judul menunjuk data tetangganya,
+ * dan tabelnya tetap terlihat rapi sementara membacanya salah.
+ */
+const KOLOM: { judul: string; kelas?: string }[] = [
+  { judul: "", kelas: "w-px" },              // ikon pensil
+  { judul: "No.", kelas: "text-right" },
+  { judul: "No Resi" },
+  { judul: "Line", kelas: "text-center" },
+  { judul: "Barcode Scan" },
+  { judul: "Kode SKU" },
+  { judul: "Nama SKU" },
+  { judul: "Qty", kelas: "text-right" },
+  { judul: "Kondisi" },
+  { judul: "Nama Barang Diterima" },
+  { judul: "Batch" },
+  { judul: "Exp. Date" },
+  { judul: "Scan By" },
+  { judul: "Scan Date" },
+  { judul: "Kamera" },
+  { judul: "Expedisi" },
+];
+
 interface Balasan {
   dari: string;
   sampai: string;
@@ -259,14 +287,32 @@ function Isi() {
           )}
 
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto scroll-slim">
+            <div className="overflow-x-auto overflow-y-auto scroll-slim max-h-[70vh]">
               <table className="w-full text-sm whitespace-nowrap">
-                <thead className="thead-ocs">
+                {/*
+                  Judul kolom dibangun dari KOLOM, bukan dari daftar teks
+                  lepas. Sebelumnya daftar itu berisi 15 judul sementara
+                  setiap barisnya punya 16 sel — kolom ikon pensil tidak
+                  punya judul — sehingga SELURUH judul bergeser satu kolom
+                  ke kiri: "No." berdiri di atas ikon pensil, "No Resi" di
+                  atas nomor urut, dan seterusnya sampai "Expedisi" berdiri
+                  di atas kolom Kamera. Semua isinya benar; hanya judulnya
+                  yang berbohong — jenis kesalahan yang paling lama tidak
+                  ketahuan, karena tabelnya terlihat rapi.
+
+                  Perataan ikut ditulis di sini supaya judul dan selnya
+                  tidak bisa lagi berbeda arah.
+                */}
+                <thead className="thead-ocs sticky top-0 z-10">
                   <tr>
-                    {["No.", "No Resi", "Line", "Barcode Scan", "Kode SKU", "Nama SKU",
-                      "Qty", "Kondisi", "Nama Barang Diterima", "Batch", "Exp. Date",
-                      "Scan By", "Scan Date", "Kamera", "Expedisi"].map((h) => (
-                      <th key={h}>{h}</th>
+                    {KOLOM.map((k, i) => (
+                      <th
+                        key={i}
+                        scope="col"
+                        className={cn("px-3 py-2.5", k.kelas)}
+                      >
+                        {k.judul || <span className="sr-only">Aksi</span>}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -276,7 +322,7 @@ function Isi() {
                       key={r.id}
                       className={cn("row-hover", r.produkTidakDikenal && "bg-warn-bg/60")}
                     >
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 w-px">
                         <button
                           onClick={() => setSunting(r)}
                           className="p-1.5 rounded text-gray-400 hover:text-brand-600 hover:bg-brand-50"
@@ -286,15 +332,15 @@ function Isi() {
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       </td>
-                      <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                      <td className="px-3 py-2 text-gray-400 text-right tabular-nums">{i + 1}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.noResi}</td>
-                      <td className="px-3 py-2 text-xs text-gray-500 tabular-nums">
+                      <td className="px-3 py-2 text-xs text-gray-500 tabular-nums text-center">
                         {line(r.urutan, r.totalBaris)}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{r.barcode || "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.sku || "—"}</td>
                       <td className="px-3 py-2">{r.namaSku || "—"}</td>
-                      <td className="px-3 py-2">{r.qty}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.qty}</td>
                       <td className="px-3 py-2">{r.kondisi}</td>
                       <td className="px-3 py-2">{r.namaDiterima || ""}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.batch || "—"}</td>

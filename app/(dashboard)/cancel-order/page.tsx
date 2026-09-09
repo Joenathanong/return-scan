@@ -209,7 +209,7 @@ function Isi() {
   };
 
   return (
-    <div className="shell-form pb-28">
+    <div className="shell pb-28">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Scan Cancel Order</h1>
@@ -252,6 +252,21 @@ function Isi() {
       {error && <Kotak jenis="error" pesan={error} onTutup={() => setError("")} />}
       {info && <Kotak jenis="info" pesan={info} onTutup={() => setInfo("")} />}
 
+      {/*
+        DUA KOLOM MULAI 1280 px (`xl:`), SATU KOLOM DI BAWAH ITU.
+
+        Kiri  — daftar barang, satu-satunya bagian yang panjang.
+        Kanan — keterangan sesi dan hitungan berjalan; keduanya cuma diisi
+                sekali di awal lalu hanya dilihat, jadi tidak perlu ikut
+                menggeser daftar barang ke bawah.
+
+        Rel kanan ditulis LEBIH DULU di DOM supaya saat grid runtuh ke satu
+        kolom, urutannya kembali seperti semula: keterangan sesi di atas,
+        daftar barang di bawahnya.
+      */}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+
+      <aside className="space-y-3 min-w-0 xl:col-start-2 xl:row-start-1 xl:sticky xl:top-4">
       {/* ── Keterangan sesi ── */}
       <div className="card p-4">
         <label className="text-xs font-medium text-gray-600 mb-1.5 block">
@@ -269,6 +284,28 @@ function Isi() {
           Nomor sesi dibuat otomatis saat disimpan.
         </p>
       </div>
+
+      <div className="card p-4">
+        <p className="text-xs font-medium text-gray-600 mb-2">Hitungan berjalan</p>
+        <div className="flex items-center gap-6">
+          <div>
+            <p className="text-2xl font-semibold text-heading tabular-nums">
+              {baris.length}
+            </p>
+            <p className="text-xs text-gray-500">baris</p>
+          </div>
+          <div>
+            <p className="text-2xl font-semibold text-heading tabular-nums">
+              {totalQty.toLocaleString("id-ID")}
+            </p>
+            <p className="text-xs text-gray-500">pcs</p>
+          </div>
+        </div>
+      </div>
+      </aside>
+
+      {/* ── Kolom utama: baris barang ── */}
+      <div className="space-y-5 min-w-0 xl:col-start-1 xl:row-start-1">
 
       {/* ── Baris barang ── */}
       {baris.map((b, i) => (
@@ -296,17 +333,19 @@ function Isi() {
           ? `Batas ${MAKS_ITEM} baris tercapai — simpan dulu`
           : "Barang"}
       </button>
+      </div>
+      </div>
 
       {/* Bilah simpan menempel di bawah — sesi input gabungan bisa panjang,
           dan tombol simpan tidak boleh ikut hanyut ke bawah layar. */}
       <div className="fixed bottom-0 left-0 right-0 lg:left-sidebar bg-white/95 backdrop-blur border-t border-brand-600/10 p-3 z-20">
-        <div className="max-w-3xl mx-auto space-y-2">
+        <div className="mx-auto w-full max-w-[1600px] space-y-2 xl:flex xl:items-center xl:gap-4 xl:space-y-0">
           {masalahPertama && (
             <p className="text-xs text-warn flex items-center gap-1.5">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {masalahPertama}
             </p>
           )}
-          <div className="flex gap-2">
+          <div className="flex gap-2 xl:ml-auto xl:min-w-[26rem]">
             <button onClick={kosongkan} className="btn-secondary flex-shrink-0">
               Kosongkan
             </button>
@@ -429,7 +468,19 @@ function KartuBaris({
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      {/*
+        DI LAYAR LEBAR baris "barcode + qty" dan baris "batch + ED" berdiri
+        BERDAMPINGAN, bukan bertumpuk: satu barang muat dalam satu baris
+        pandang, dan sepuluh baris barang tidak lagi menjadi sepuluh layar.
+
+        Keterangan produk (nama ketemu / belum terdaftar / tanpa barcode)
+        selalu melebar dua kolom di bawahnya. Ketiganya tidak pernah muncul
+        bersamaan — yang satu mensyaratkan nama ada, dua lainnya
+        mensyaratkan nama tidak ada — jadi aman berbagi baris yang sama.
+      */}
+      <div className="grid gap-3 xl:grid-cols-2 xl:gap-x-5">
+
+      <div className="flex flex-col sm:flex-row gap-3 xl:col-start-1 xl:row-start-1">
         <div className="flex-1 min-w-0">
           <label className="text-xs font-medium text-gray-600 mb-1.5 block">
             Kode / Barcode Produk
@@ -473,7 +524,7 @@ function KartuBaris({
       </div>
 
       {baris.nama && (
-        <p className="text-sm text-ok-strong flex items-start gap-1.5">
+        <p className="text-sm text-ok-strong flex items-start gap-1.5 xl:col-span-2 xl:row-start-2">
           <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>
             {baris.nama}
@@ -483,7 +534,7 @@ function KartuBaris({
       )}
 
       {perluNamaManual && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 xl:col-span-2 xl:row-start-2">
           <p className="text-sm text-bad flex items-start gap-1.5">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             {baris.tidakDikenal
@@ -505,7 +556,7 @@ function KartuBaris({
 
       {/* Barang tanpa barcode sama sekali — cukup ketik namanya. */}
       {!baris.barcode && (
-        <div>
+        <div className="xl:col-span-2 xl:row-start-2">
           <label className="text-xs font-medium text-gray-600 mb-1.5 block">
             Nama barang <span className="text-gray-400 font-normal">(kalau tanpa barcode)</span>
           </label>
@@ -518,7 +569,7 @@ function KartuBaris({
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 xl:col-start-2 xl:row-start-1">
         <div className="flex-1 min-w-0">
           <KolomBatch
             inputRef={batchRef}
@@ -550,7 +601,10 @@ function KartuBaris({
         </div>
       </div>
 
-      {masalah && <p className="text-xs text-gray-400">{masalah}</p>}
+      {masalah && (
+        <p className="text-xs text-gray-400 xl:col-span-2 xl:row-start-3">{masalah}</p>
+      )}
+      </div>
     </div>
   );
 }

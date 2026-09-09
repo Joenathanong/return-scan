@@ -66,6 +66,50 @@ tulisannya. Warna yang sama dipakai di kartu dashboard, versi lembut.
 
 ---
 
+## Lebar halaman
+
+Dua kerangka, dipilih dari isi halamannya — bukan dari selera:
+
+| Kelas | Lebar | Dipakai di |
+|---|---|---|
+| `.shell` | penuh sampai 1600px | dashboard, tabel, **dan halaman scan** |
+| `.shell-form` | 768px | formulir pendek: pengaturan, master expedisi |
+
+**Halaman scan pindah dari `.shell-form` ke `.shell`.** Sebelumnya
+`/bongkaran` dan `/cancel-order` sengaja dibuat sempit dengan alasan "baris
+teks sepanjang 1600px tidak terbaca". Alasan itu benar untuk formulir satu
+kolom, tapi keliru untuk kedua halaman ini: isinya bukan paragraf,
+melainkan daftar kartu — dan di layar 1920px separuh layar tinggal kosong
+sementara operator menggulir terus-menerus.
+
+Yang melebar adalah **grid**-nya, bukan kolom isiannya:
+
+- **Halaman** — mulai `xl` (1280px) terbelah jadi kolom isian + rel kanan
+  22rem. Rel kanan berisi yang hanya perlu dibaca: kamera, kepala sesi (no.
+  resi, jam scan, peringatan duplikat), dan hitungan berjalan. Rel itu
+  `sticky`, jadi nomor resi tetap terlihat saat kartu barang sudah panjang.
+- **Kartu barang (`/bongkaran`)** — barcode+qty dan batch+ED di kiri,
+  empat tombol kondisi menumpuk di kolom kanan 18rem.
+- **Kartu barang (`/cancel-order`)** — barcode+qty dan batch+ED
+  berdampingan; satu barang muat dalam satu baris pandang.
+- **Bilah simpan** — inner-nya ikut selebar halaman; di `xl` pesan
+  peringatan di kiri, tombol Simpan di kanan.
+
+### Urutan DOM sengaja tidak berubah
+
+Rel kanan ditulis **lebih dulu** di DOM, dan penempatan kolom dilakukan
+eksplisit lewat `col-start`/`row-start`, bukan lewat urutan tulis. Sebabnya:
+di bawah `xl` grid runtuh ke satu kolom yang mengikuti urutan DOM apa
+adanya, dan urutan itu harus tetap persis seperti di PDT — kamera, kepala
+sesi, kartu barang; lalu di dalam kartu: barcode → kondisi → batch. Kalau
+penempatan hanya mengandalkan urutan tulis, salah satu dari dua tampilan itu
+pasti keliru.
+
+Artinya: **tidak ada satu pun perubahan di PDT.** Semua kelas baru berawalan
+`xl:`, dan layar PDT (~360–800px) tidak pernah mencapainya.
+
+---
+
 ## Cetak tidak tersentuh
 
 Tata letak tanda terima dikalibrasi dari pengukuran piksel hasil cetak

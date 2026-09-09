@@ -4,11 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
-import { mintaJson, pesanError } from "@/lib/http";
+import { mintaJson, pesanError, HttpError } from "@/lib/http";
 import {
   KONDISI, LABEL_KONDISI, butuhBarcode, bacaBatch, periksaItem,
-  KAMERA, type NomorKamera, type Kondisi, type ItemMasuk,
+  KAMERA, isKamera, type NomorKamera, type Kondisi, type ItemMasuk,
 } from "@/lib/bongkaran";
+import {
+  simpanAmplop, bacaAmplop, hapusAmplop, UMUR_SESI_JAM,
+} from "@/lib/sesi-lokal";
 import {
   sinkron, cariBarcode, saranBatch, isiCache, catatBatchLokal,
   kosongkanCache, cacheTersedia, MIN_KARAKTER_SARAN, type BatchCache,
@@ -17,6 +20,7 @@ import { bersihkanKode } from "@/lib/produk";
 import {
   PackageOpen, Loader2, AlertCircle, CheckCircle2, X, Plus, Trash2,
   RefreshCw, ScanLine, Clock, WifiOff, Info, ChevronDown, Video, Repeat2,
+  RotateCcw,
 } from "lucide-react";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -84,6 +88,59 @@ function kunciAcak(): string {
   return `k-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Simpanan sesi di perangkat
+
+   Yang disimpan bukan sekadar keranjang, melainkan SELURUH yang dibutuhkan
+   untuk melanjutkan: id draft (supaya Simpan menyelesaikan baris yang sama,
+   bukan membuat baris kedua), jam scan dari server (supaya offset tiap
+   barang tetap dihitung dari titik yang sama), dan nomor kamera (supaya
+   gerbang kamera tidak menghalangi sesi yang sedang berjalan).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Naikkan angka ini setiap kali bentuk `Item` atau `Sesi` berubah.
+ * Simpanan berversi lain dibuang, tidak ditebak-tebak isinya.
+ */
+const VERSI_SIMPANAN = 1;
+
+interface Simpanan {
+  kamera: NomorKamera | null;
+  sesi: Sesi;
+  items: Item[];
+}
+
+/**
+ * Isi localStorage bisa disunting siapa saja lewat DevTools, dan bisa
+ * tertinggal dari rilis sebelumnya. Diperiksa seperlunya — cukup untuk
+ * memastikan layar tidak dipulihkan ke keadaan yang mustahil.
+ */
+function sahSimpanan(v: unknown): v is Simpanan {
+  if (!v || typeof v !== "object") return false;
+  const s = v as Simpanan;
+
+  const sesi = s.sesi as Sesi | undefined;
+  if (!sesi || typeof sesi !== "object") return false;
+  if (typeof sesi.noResi !== "string" || !sesi.noResi) return false;
+  if (typeof sesi.scannedAt !== "string" || !sesi.scannedAt) return false;
+  if (typeof sesi.t0 !== "number" || !Number.isFinite(sesi.t0)) return false;
+  if (sesi.id !== null && typeof sesi.id !== "string") return false;
+  if (typeof sesi.klienKunci !== "string") return false;
+
+  if (!Array.isArray(s.items) || s.items.length === 0) return false;
+  const itemSah = s.items.every(
+    (it) =>
+      it && typeof it === "object" &&
+      typeof it.kunci === "string" &&
+      typeof it.qty === "string" &&
+      typeof it.barcode === "string"
+  );
+  if (!itemSah) return false;
+
+  if (s.kamera !== null && !isKamera(s.kamera)) return false;
+  return true;
+}
+
 /** Warna tiap kondisi saat terpilih — dipakai juga di dashboard. */
 const WARNA_KONDISI: Record<Kondisi, string> = {
   BAGUS:         "bg-ok border-ok text-white",
@@ -100,6 +157,21 @@ const itemBaru = (): Item => ({
   namaDiterima: "", jenisBarcode: "", qty: "1", batch: "", edDate: "",
   edOtomatis: false, peringatanBatch: "", offsetMs: null,
 });
+
+/**
+ * Menaikkan penghitung kunci kartu melewati kunci yang baru dipulihkan.
+ *
+ * Tanpa ini, kartu pertama yang ditambahkan sesudah pemulihan mendapat
+ * kunci "i1" — kunci yang mungkin sudah dipakai kartu hasil pemulihan.
+ * React lalu menganggap keduanya kartu yang sama, dan isian salah satunya
+ * muncul di kartu yang lain.
+ */
+function pastikanNomorKartu(items: Item[]): void {
+  for (const it of items) {
+    const n = Number(/^i(\d+)$/.exec(it.kunci)?.[1] ?? 0);
+    if (Number.isFinite(n) && n > nomorKartu) nomorKartu = n;
+  }
+}
 
 function keItemMasuk(it: Item): ItemMasuk {
   const perluBarcode = it.kondisi ? butuhBarcode(it.kondisi) : true;
@@ -276,6 +348,64 @@ function Isi() {
 
   useEffect(() => { resiRef.current?.focus(); }, []);
 
+  /* ── Pemulihan sesi yang terputus ────────────────────────────────────
+     Draft di server sudah ada sejak resi di-scan; yang selama ini hilang
+     saat halaman ditutup adalah KERANJANGNYA. Dipulihkan dari perangkat,
+     tanpa satu pun kueri ke database.
+     ─────────────────────────────────────────────────────────────────── */
+  const [dipulihkan, setDipulihkan] = useState(false);
+
+  /** Baru boleh menulis simpanan SESUDAH percobaan pemulihan selesai.
+   *  Tanpa penanda ini, render pertama (sesi masih null) akan menghapus
+   *  simpanan yang justru hendak dipulihkan. */
+  const siapSimpan = useRef(false);
+  const terbaruRef = useRef<Simpanan | null>(null);
+
+  useEffect(() => {
+    const p = bacaAmplop<Simpanan>(VERSI_SIMPANAN, sahSimpanan);
+    if (p) {
+      pastikanNomorKartu(p.items);
+      setKamera(p.kamera);
+      setSesi(p.sesi);
+      setItems(p.items);
+      setDipulihkan(true);
+    }
+    siapSimpan.current = true;
+  }, []);
+
+  // Cermin keadaan terbaru untuk penulisan mendadak (pagehide / lepas
+  // pasang). Tanpa ref, penulis itu akan menutup nilai dari render lama.
+  useEffect(() => {
+    terbaruRef.current = sesi ? { kamera, sesi, items } : null;
+  });
+
+  // Penulisan biasa: ditunda 400 ms supaya mengetik batch delapan karakter
+  // tidak berarti delapan kali serialisasi keranjang.
+  useEffect(() => {
+    if (!siapSimpan.current) return;
+    if (!sesi) { hapusAmplop(); return; }
+    const t = setTimeout(() => simpanAmplop(VERSI_SIMPANAN, { kamera, sesi, items }), 400);
+    return () => clearTimeout(t);
+  }, [sesi, items, kamera]);
+
+  // Penulisan mendadak: PDT yang layarnya dimatikan, tab yang ditutup, dan
+  // perpindahan menu (pembersihan efek ini) — tiga jalan keluar yang tidak
+  // menunggu penundaan 400 ms di atas.
+  useEffect(() => {
+    const tulisSekarang = () => {
+      if (!siapSimpan.current) return;
+      const t = terbaruRef.current;
+      if (t) simpanAmplop(VERSI_SIMPANAN, t);
+    };
+    window.addEventListener("pagehide", tulisSekarang);
+    document.addEventListener("visibilitychange", tulisSekarang);
+    return () => {
+      window.removeEventListener("pagehide", tulisSekarang);
+      document.removeEventListener("visibilitychange", tulisSekarang);
+      tulisSekarang();
+    };
+  }, []);
+
   const mulai = async () => {
     const kode = resi.replace(/\s+/g, "").toUpperCase();
     if (!kode || memulai) return;
@@ -285,9 +415,31 @@ function Isi() {
     const t0 = Date.now();
     const pertama = itemBaru();
 
+    /**
+     * Sesi hanya dibuat kalau ada yang bisa dibuat.
+     *
+     * SEBELUMNYA blok catch di bawah menelan SEMUA kegagalan dan
+     * memperlakukannya sebagai "jaringan putus" — termasuk 400 (kamera
+     * belum terkirim), 401 (akun dipakai di perangkat lain), 403 (izin
+     * dicabut), dan 500 (bug di server). Semuanya muncul di layar sebagai
+     * "Server tidak terjangkau", padahal servernya sehat dan sedang
+     * memberi tahu persis apa yang salah.
+     *
+     * Akibatnya bukan cuma pesan yang menyesatkan: operator lanjut men-scan
+     * seluruh isi paket di jalur luring, lalu Simpan gagal juga karena
+     * penyebab aslinya tidak pernah hilang — dan pekerjaannya hangus.
+     *
+     * Jadi: hanya kegagalan JARINGAN SUNGGUHAN yang boleh jatuh ke jalur
+     * luring. Itu ditandai `HttpError.status === 0`, yaitu permintaan yang
+     * tidak pernah mendapat balasan (fetch gagal atau kehabisan waktu).
+     * Balasan HTTP apa pun berarti server TERJANGKAU, dan pesannya harus
+     * ditampilkan apa adanya.
+     */
+    let sesiBaru: Sesi | null = null;
+
     try {
       const d = await mintaJson<{
-        id: string; noResi: string; scannedAt: string;
+        id: string; noResi: string; scannedAt: string; dipakaiUlang?: boolean;
         duplikat: Sesi["duplikat"]; retur: Sesi["retur"];
       }>("/api/bongkaran/mulai",
         { method: "POST", body: { noResi: kode, kamera }, timeoutMs: 15_000 });
@@ -297,27 +449,51 @@ function Isi() {
       // memakai t0 yang lama akan menghitung lama perjalanan jaringan ke
       // dalam offset setiap barang — dan selisihnya membesar justru ketika
       // jaringan gudang sedang buruk.
-      setSesi({
+      sesiBaru = {
         id: d.id, noResi: d.noResi, scannedAt: d.scannedAt,
         luring: false, t0: Date.now(), duplikat: d.duplikat, retur: d.retur,
         klienKunci: kunciAcak(),
-      });
+      };
+
+      // Bukan sekadar keterangan: kalau operator melihat resi ini di panel
+      // "Belum selesai" tadi pagi, ia perlu tahu bahwa yang sekarang dibuka
+      // adalah baris yang SAMA — bukan baris kedua yang nanti harus
+      // dibereskan seseorang.
+      if (d.dipakaiUlang) {
+        setInfo(
+          `Draft resi ini yang tertinggal tadi dipakai ulang, jadi tidak ada baris ` +
+            `ganda di dashboard. Jam scan disetel ke sekarang.`
+        );
+      }
     } catch (e) {
-      // JARINGAN PUTUS — jangan hentikan operator. Sesi dibuat lokal, jam
-      // diambil dari perangkat, dan barisnya nanti ditandai di server
-      // sebagai "waktu dari klien" supaya bisa ditelusuri.
-      console.error("[bongkaran] /mulai gagal, lanjut luring:", e);
-      setSesi({
-        id: null, noResi: kode, scannedAt: new Date(t0).toISOString(),
-        luring: true, t0, duplikat: null, retur: null,
-        klienKunci: kunciAcak(),
-      });
-    } finally {
+      const jaringanPutus = e instanceof HttpError && e.status === 0;
+
+      if (jaringanPutus) {
+        // Benar-benar tidak ada balasan — jangan hentikan operator.
+        console.error("[bongkaran] /mulai tidak terjawab, lanjut luring:", e);
+        sesiBaru = {
+          id: null, noResi: kode, scannedAt: new Date(t0).toISOString(),
+          luring: true, t0, duplikat: null, retur: null,
+          klienKunci: kunciAcak(),
+        };
+      } else {
+        console.error("[bongkaran] /mulai ditolak server:", e);
+        setError(
+          pesanError(e, "Gagal memulai scan resi.") +
+            " Server terjangkau, jadi ini bukan masalah jaringan — resi belum " +
+            "dibuka supaya tidak ada barang yang di-scan lalu hilang saat disimpan."
+        );
+      }
+    }
+
+    if (sesiBaru) {
+      setDipulihkan(false);
+      setSesi(sesiBaru);
       setItems([pertama]);
       setFokusKunci(pertama.kunci);
       setResi("");
-      setMemulai(false);
     }
+    setMemulai(false);
   };
 
   const lupakanFokus = useCallback(() => setFokusKunci(null), []);
@@ -348,6 +524,8 @@ function Isi() {
 
   const batalkanSesi = async () => {
     const id = sesi?.id;
+    hapusAmplop();
+    setDipulihkan(false);
     setSesi(null);
     setItems([]);
     setResi("");
@@ -376,22 +554,55 @@ function Isi() {
     setError("");
     try {
       const muatan = items.map(keItemMasuk);
-      const d = await mintaJson<{ noResi: string; jumlahBarang: number }>(
-        "/api/bongkaran/simpan",
-        {
+
+      const kirim = (body: Record<string, unknown>) =>
+        mintaJson<{ noResi: string; jumlahBarang: number }>("/api/bongkaran/simpan", {
           method: "POST",
           timeoutMs: 45_000,
-          body: sesi.id
-            ? { bongkaranId: sesi.id, items: muatan }
-            : {
-                noResi: sesi.noResi,
-                scannedAtKlien: sesi.scannedAt,
-                klienKunci: sesi.klienKunci,
-                kamera,
-                items: muatan,
-              },
-        }
-      );
+          body,
+        });
+
+      /**
+       * Jalur tanpa draft: resi dibuat langsung saat Simpan.
+       *
+       * `klienKunci` membuatnya idempoten — dua kiriman dengan kunci yang
+       * sama menghasilkan satu resi, bukan dua.
+       */
+      const badanTanpaDraft = () => ({
+        noResi: sesi.noResi,
+        scannedAtKlien: sesi.scannedAt,
+        klienKunci: sesi.klienKunci,
+        kamera,
+        items: muatan,
+      });
+
+      let d: { noResi: string; jumlahBarang: number };
+      try {
+        d = sesi.id
+          ? await kirim({ bongkaranId: sesi.id, items: muatan })
+          : await kirim(badanTanpaDraft());
+      } catch (e) {
+        /*
+          404 = draft-nya sudah tidak ada.
+
+          Bisa terjadi pada sesi yang dipulihkan setelah lama menganggur
+          (draft-nya keburu disapu), atau kalau admin menekan Buang di
+          dashboard sementara PDT-nya masih memegang sesi itu. Yang salah
+          di situ hanya INDUKNYA; barang-barang di layar tetap hasil
+          bongkar sungguhan, dan menolak menyimpannya berarti menyuruh
+          orang membongkar ulang satu kardus yang sudah selesai.
+
+          Jadi dikirim ulang lewat jalur tanpa draft. Konsekuensinya jujur:
+          baris itu ditandai `waktu_dari_klien`, karena dari sisi server
+          jamnya memang datang dari perangkat — walaupun nilainya aslinya
+          berasal dari server saat resi di-scan. Ditandai lebih baik
+          daripada disamarkan.
+        */
+        const draftHilang = e instanceof HttpError && e.status === 404 && Boolean(sesi.id);
+        if (!draftHilang) throw e;
+        console.error("[bongkaran] draft hilang, simpan lewat jalur tanpa draft:", e);
+        d = await kirim(badanTanpaDraft());
+      }
 
       // Batch yang barusan dipakai langsung masuk cache lokal, tanpa
       // menunggu sinkron berikutnya — resi berikutnya sering memakai batch
@@ -417,7 +628,7 @@ function Isi() {
   /* ────────────────────────────────────────────────────────────────────── */
 
   return (
-    <div className="shell-form pb-28">
+    <div className="shell pb-28">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Scan Bongkaran</h1>
@@ -484,6 +695,40 @@ function Isi() {
       {info && <Kotak jenis="info" pesan={info} onTutup={() => setInfo("")} />}
 
       {/*
+        SESI YANG DIPULIHKAN.
+
+        Diberi tahu, bukan dipulihkan diam-diam. Operator yang membuka
+        halaman ini dan langsung menemukan lima kartu berisi harus tahu dari
+        mana asalnya — kalau tidak, ia akan mengira dirinya salah menekan
+        sesuatu, lalu membuangnya untuk aman. Yang justru bukan yang aman.
+      */}
+      {dipulihkan && sesi && (
+        <div className="rounded-xl px-4 py-3 border border-brand-200 bg-brand-50/60 flex gap-2.5 text-sm">
+          <RotateCcw className="w-4 h-4 flex-shrink-0 mt-0.5 text-brand-600" />
+          <div className="space-y-2 min-w-0">
+            <p className="text-ink">
+              Sesi yang belum sempat disimpan dipulihkan dari perangkat ini:{" "}
+              <span className="font-mono font-semibold">{sesi.noResi}</span>,{" "}
+              {items.length} barang, di-scan {jamWIB(sesi.scannedAt)} WIB. Lanjutkan
+              dari sini lalu tekan Simpan — nomor resinya tidak perlu di-scan ulang.
+            </p>
+            <p className="text-xs text-gray-500">
+              Simpanan di perangkat bertahan {UMUR_SESI_JAM} jam. Kalau isinya sudah
+              tidak Anda kenali, buang saja — resinya bisa di-scan ulang dari awal.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setDipulihkan(false)} className="btn-primary text-xs">
+                Lanjutkan
+              </button>
+              <button onClick={batalkanSesi} className="btn-ghost text-xs text-bad">
+                <Trash2 className="w-3.5 h-3.5" /> Buang sesi ini
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*
         GERBANG KAMERA — tidak ada yang bisa di-scan sebelum kamera dipilih.
         Dibuat sebagai layar penuh, bukan sebagai kolom tambahan di form,
         supaya tidak mungkin terlewat: nomor kamera yang kosong baru akan
@@ -519,6 +764,23 @@ function Isi() {
         </div>
       ) : (
       <>
+      {/*
+        DUA KOLOM MULAI 1280 px (`xl:`), SATU KOLOM DI BAWAH ITU.
+
+        Kolom kiri hanya berisi yang benar-benar diketik tangan: resi, lalu
+        kartu barang. Kolom kanan berisi yang hanya perlu DIBACA — kamera,
+        nomor resi, jam scan, dan hitungan berjalan — dan menempel (sticky)
+        supaya tetap terlihat saat kartu barang sudah panjang.
+
+        Rel kanan sengaja ditulis LEBIH DULU di DOM. Di bawah `xl` grid-nya
+        runtuh jadi satu kolom dan urutannya kembali persis seperti di PDT:
+        kamera, kepala sesi, baru kartu barang. Kalau ditulis belakangan,
+        layar PDT akan menampilkan kartu barang dulu dan nomor resi jauh di
+        bawahnya.
+      */}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+
+      <aside className="space-y-3 min-w-0 xl:col-start-2 xl:row-start-1 xl:sticky xl:top-4">
       {/* Penanda kamera aktif — selalu terlihat, dan bisa diganti selama
           belum ada resi yang sedang dibuka. */}
       <div className="flex items-center gap-2 text-sm">
@@ -538,6 +800,37 @@ function Isi() {
           <Repeat2 className="w-3.5 h-3.5" /> Ganti
         </button>
       </div>
+
+      {sesi && <KepalaSesi sesi={sesi} onBatal={batalkanSesi} />}
+
+      {/* Hitungan berjalan — hanya di rel kanan, dan hanya angka. Tombol
+          Simpan di bilah bawah sudah menyebut jumlah barang; yang belum
+          pernah terlihat sebelum menekan Simpan adalah total pcs-nya. */}
+      {sesi && (
+        <div className="card p-4">
+          <p className="text-xs font-medium text-gray-600 mb-2">Hitungan berjalan</p>
+          <div className="flex items-center gap-6">
+            <div>
+              <p className="text-2xl font-semibold text-heading tabular-nums">
+                {items.length}
+              </p>
+              <p className="text-xs text-gray-500">barang</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-heading tabular-nums">
+                {items
+                  .reduce((jml, it) => jml + (parseInt(it.qty || "0", 10) || 0), 0)
+                  .toLocaleString("id-ID")}
+              </p>
+              <p className="text-xs text-gray-500">pcs</p>
+            </div>
+          </div>
+        </div>
+      )}
+      </aside>
+
+      {/* ── Kolom utama ── */}
+      <div className="space-y-5 min-w-0 xl:col-start-1 xl:row-start-1">
 
       {/* ── Langkah 1: resi ── */}
       {!sesi ? (
@@ -568,8 +861,6 @@ function Isi() {
         </div>
       ) : (
         <>
-          <KepalaSesi sesi={sesi} onBatal={batalkanSesi} />
-
           {items.map((it, i) => (
             <KartuBarang
               key={it.kunci}
@@ -593,7 +884,7 @@ function Isi() {
           {/* Bilah simpan — menempel di bawah supaya selalu terjangkau ibu
               jari di layar PDT yang sempit. */}
           <div className="fixed bottom-0 left-0 right-0 lg:left-sidebar bg-white/95 backdrop-blur border-t border-brand-600/10 p-3 z-20">
-            <div className="max-w-3xl mx-auto space-y-2">
+            <div className="mx-auto w-full max-w-[1600px] space-y-2 xl:flex xl:items-center xl:gap-4 xl:space-y-0">
               {masalahPertama && (
                 <p className="text-xs text-amber-700 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {masalahPertama}
@@ -602,7 +893,8 @@ function Isi() {
               <button
                 onClick={simpan}
                 disabled={!bisaSimpan}
-                className="btn-primary w-full justify-center py-3 text-base disabled:opacity-40"
+                className="btn-primary w-full justify-center py-3 text-base disabled:opacity-40
+                           xl:w-auto xl:ml-auto xl:min-w-[22rem]"
               >
                 {menyimpan && <Loader2 className="w-5 h-5 animate-spin" />}
                 Simpan ({items.length} barang)
@@ -611,6 +903,8 @@ function Isi() {
           </div>
         </>
       )}
+      </div>
+      </div>
       </>
       )}
     </div>
@@ -643,8 +937,9 @@ function KepalaSesi({ sesi, onBatal }: { sesi: Sesi; onBatal: () => void }) {
       {sesi.luring && (
         <p className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800 flex gap-2">
           <WifiOff className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-          Server tidak terjangkau saat resi di-scan, jadi waktunya diambil dari jam
-          perangkat ini. Data tetap bisa disimpan, dan akan ditandai untuk ditelusuri.
+          Permintaan ke server tidak terjawab sama sekali saat resi ini di-scan,
+          jadi waktunya diambil dari jam perangkat ini. Data tetap bisa disimpan
+          dan akan ditandai untuk ditelusuri.
         </p>
       )}
 
@@ -830,6 +1125,20 @@ function KartuBarang({
       </div>
 
       {/*
+        ISI KARTU: TIGA BLOK, DUA KOLOM DI LAYAR LEBAR.
+
+        Kiri  — barcode + qty, keterangan produk, lalu batch + ED.
+        Kanan — pilihan kondisi, menumpuk empat ke bawah supaya labelnya
+                utuh dan tingginya kira-kira menyamai kolom kiri.
+
+        Penempatannya EKSPLISIT (col-start/row-start), bukan urutan tulis,
+        justru supaya urutan DOM boleh tetap barcode → kondisi → batch. Itu
+        urutan yang diminta untuk PDT, dan di bawah `xl` grid-nya runtuh ke
+        satu kolom yang mengikuti urutan DOM apa adanya.
+      */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem] xl:gap-x-5">
+
+      {/*
         BERDAMPINGAN MULAI 640 px (`sm:`), BERTUMPUK DI BAWAH ITU.
 
         Layar PDT genggam sering hanya ~360 px. Di lebar itu, kolom barcode
@@ -839,7 +1148,7 @@ function KartuBarang({
         di layar yang memang cukup lebar; di PDT sempit tetap bertumpuk.
       */}
       {perluBarcode ? (
-        <>
+        <div className="space-y-3 xl:col-start-1 xl:row-start-1">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 min-w-0">
             <label className="text-xs font-medium text-gray-600 mb-1.5 block">Barcode</label>
@@ -912,9 +1221,9 @@ function KartuBarang({
               </div>
             )}
           </div>
-        </>
+        </div>
       ) : (
-        <>
+        <div className="space-y-3 xl:col-start-1 xl:row-start-1">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 min-w-0">
               <label className="text-xs font-medium text-gray-600 mb-1.5 block">
@@ -939,7 +1248,7 @@ function KartuBarang({
             Kondisi Isi Salah tidak memakai barcode — barang asing biasanya tidak
             punya barcode yang dikenali sistem ini.
           </p>
-        </>
+        </div>
       )}
 
       {/*
@@ -954,11 +1263,11 @@ function KartuBarang({
         barcode di atas akan hilang dengan sendirinya. Yang diubah hanya
         urutan tampilannya, bukan aturannya.
       */}
-      <div>
+      <div className="xl:col-start-2 xl:row-start-1 xl:row-span-2">
         <label className="text-xs font-medium text-gray-600 mb-1.5 block">
           Kondisi <span className="text-gray-400 font-normal">· Alt+1…4</span>
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 xl:grid-cols-1 gap-2">
           {KONDISI.map((k, i) => {
             const aktif = item.kondisi === k;
             return (
@@ -992,7 +1301,7 @@ function KartuBarang({
         pengisian: batch berpola tanggal mengisi ED, jadi kolom yang mengisi
         dibaca lebih dulu daripada kolom yang terisi.
       */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 xl:col-start-1 xl:row-start-2">
         <div className="flex-1 min-w-0">
           <KolomBatch
             inputRef={batchRef}
@@ -1028,8 +1337,9 @@ function KartuBarang({
       </div>
 
       {masalah && (
-        <p className="text-xs text-gray-400">{masalah}</p>
+        <p className="text-xs text-gray-400 xl:col-span-2 xl:row-start-3">{masalah}</p>
       )}
+      </div>
     </div>
   );
 }

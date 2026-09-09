@@ -226,10 +226,18 @@
                        kolom yang diperas ke 896px memaksa gulir mendatar
                        terus-menerus, padahal layarnya kosong separuh.
 
-     `.shell-form`   — halaman isian dan scan. TETAP sempit, dan itu
-                       disengaja: baris teks sepanjang 1600px tidak bisa
-                       dibaca, dan kolom isian selebar itu membuat mata
-                       berpindah jauh antara label dan nilainya.
+     `.shell-form`   — formulir pendek (pengaturan, master expedisi).
+                       TETAP sempit, dan itu disengaja: kolom isian selebar
+                       1600px membuat mata berpindah jauh antara label dan
+                       nilainya.
+
+     Halaman SCAN (/bongkaran, /cancel-order) dulu memakai `.shell-form`
+     juga, dengan alasan yang sama. Alasan itu sekarang tidak berlaku:
+     halaman-halaman itu bukan formulir satu kolom lagi, melainkan daftar
+     kartu yang di layar lebar dipecah menjadi kolom isian + rel keterangan.
+     Yang melebar adalah GRID-nya, bukan kolom isiannya — lebar setiap
+     kolom input tetap dibatasi oleh gridnya sendiri, sehingga jarak
+     label-ke-nilai tidak ikut memanjang.
      ───────────────────────────────────────────────────────────────────── */
   .shell {
     @apply w-full max-w-[1600px] space-y-5;

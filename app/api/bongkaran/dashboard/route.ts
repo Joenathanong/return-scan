@@ -3,11 +3,16 @@ import { prisma } from "@/lib/db";
 import { handle, requireBongkaran } from "@/lib/api";
 import { todayWIB, shiftDays } from "@/lib/date";
 import { KONDISI, KAMERA, type Kondisi } from "@/lib/bongkaran";
+import { sapuJikaPerlu } from "@/lib/draft-server";
+import { UMUR_DRAFT_SAPU_JAM } from "@/lib/draft";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const HARI_GRAFIK = 14;
+
+/** Berapa draft yang ditampilkan. Sisanya cukup diwakili angka total. */
+const MAKS_DRAFT_TAMPIL = 20;
 
 /**
  * GET /api/bongkaran/dashboard?tanggal=YYYY-MM-DD
@@ -24,6 +29,21 @@ export async function GET(req: NextRequest) {
   return handle(async () => {
     await requireBongkaran();
 
+    /*
+      Bersih-bersih draft basi menumpang di sini, bukan di cron atau di
+      permintaan tersendiri.
+
+      Alasannya biaya: dashboard adalah satu-satunya halaman yang benar-benar
+      peduli pada daftar draft, dan orang membukanya beberapa kali sehari —
+      itu sudah cukup sering untuk menjaga daftarnya tetap pendek, tanpa satu
+      pun permintaan tambahan ke TiDB dari penjadwal yang jalan sepanjang
+      malam ke database yang tidak ada perubahannya.
+
+      `sapuJikaPerlu` sendiri membatasi diri satu kali per jam per instance,
+      jadi lima puluh kali muat ulang tetap menghasilkan satu penyapuan.
+    */
+    await sapuJikaPerlu();
+
     const url = new URL(req.url);
     const tanggal = url.searchParams.get("tanggal") || todayWIB();
     const mulai = shiftDays(-(HARI_GRAFIK - 1), tanggal);
@@ -35,6 +55,7 @@ export async function GET(req: NextRequest) {
       perHari,
       perOperator,
       draft,
+      draftTotal,
       barcodeAsing,
       waktuMeragukan,
       perKamera,
@@ -72,8 +93,13 @@ export async function GET(req: NextRequest) {
           scannedBy: { select: { name: true } },
         },
         orderBy: { scannedAt: "desc" },
-        take: 50,
+        take: MAKS_DRAFT_TAMPIL,
       }),
+
+      // Totalnya dihitung terpisah supaya panelnya bisa jujur: "20 dari 37"
+      // memberi tahu ada yang tidak terlihat, sedangkan daftar yang diam-diam
+      // terpotong di angka 20 tidak.
+      prisma.bongkaran.count({ where: { status: "draft" } }),
 
       // Dibatasi rentang 14 hari yang sama dengan grafik, BUKAN sepanjang
       // masa. Panelnya berdiri di bawah pemilih tanggal; kalau isinya
@@ -160,6 +186,9 @@ export async function GET(req: NextRequest) {
         scannedAt: d.scannedAt.toISOString(),
         oleh: d.scannedBy.name,
       })),
+      draftTotal,
+      /** Ambang penyapuan otomatis — layar menyebutkannya, bukan mengarangnya. */
+      draftUmurSapuJam: UMUR_DRAFT_SAPU_JAM,
       barcodeAsing: barcodeAsing.map((b) => ({
         barcode: b.barcode ?? "",
         jumlah: b._count._all,

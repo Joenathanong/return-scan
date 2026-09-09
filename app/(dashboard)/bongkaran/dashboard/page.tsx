@@ -10,8 +10,26 @@ import { LABEL_KONDISI, type Kondisi } from "@/lib/bongkaran";
 import {
   Loader2, AlertCircle, CheckCircle2, X, PackageOpen,
   Barcode, Clock, Trash2, RefreshCw, FileSpreadsheet, Video, Wand2,
-  Eye, Save, ChevronRight,
+  Eye, Save, ChevronRight, Brush,
 } from "lucide-react";
+
+/**
+ * "3 jam lalu" / "2 hari lalu".
+ *
+ * Umur JAUH lebih berguna daripada jam absolut di panel ini: yang ingin
+ * diketahui bukan "pukul berapa", melainkan "apakah ini masih mungkin
+ * sedang dikerjakan seseorang".
+ */
+function umurSingkat(iso: string, sekarang = Date.now()): string {
+  const ms = sekarang - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const menit = Math.floor(ms / 60000);
+  if (menit < 1) return "baru saja";
+  if (menit < 60) return `${menit} menit lalu`;
+  const jam = Math.floor(menit / 60);
+  if (jam < 24) return `${jam} jam lalu`;
+  return `${Math.floor(jam / 24)} hari lalu`;
+}
 
 interface Data {
   tanggal: string;
@@ -20,6 +38,10 @@ interface Data {
   grafik: { tanggal: string; resi: number }[];
   operator: { id: string; nama: string; resi: number; terakhir: string | null }[];
   draft: { id: string; noResi: string; tanggal: string; scannedAt: string; oleh: string }[];
+  /** Seluruh draft yang ada, termasuk yang tidak ikut ditampilkan. */
+  draftTotal: number;
+  /** Ambang umur penyapuan otomatis, dari server. */
+  draftUmurSapuJam: number;
   barcodeAsing: { barcode: string; jumlah: number; namaDitulis: string }[];
   waktuMeragukan: number;
   kamera: { kamera: number | null; resi: number }[];
@@ -193,6 +215,31 @@ function Isi() {
     }
   };
 
+  const [menyapu, setMenyapu] = useState(false);
+
+  /**
+   * Membersihkan draft basi SEKARANG.
+   *
+   * Server sudah menyapu sendiri sekali sejam, jadi tombol ini bukan
+   * syarat kerja — ia untuk hari yang kacau, saat admin ingin daftarnya
+   * bersih sebelum menutup laporan.
+   */
+  const sapuDraft = async () => {
+    setMenyapu(true);
+    setError("");
+    try {
+      const r = await mintaJson<{ pesan: string }>("/api/bongkaran/draft/sapu", {
+        method: "POST", body: {}, timeoutMs: 30_000,
+      });
+      setInfo(r.pesan);
+      muat();
+    } catch (e) {
+      setError(pesanError(e, "Gagal membersihkan draft."));
+    } finally {
+      setMenyapu(false);
+    }
+  };
+
   const buangDraft = async (id: string, noResi: string) => {
     try {
       await mintaJson(`/api/bongkaran/${id}`, { method: "DELETE" });
@@ -358,19 +405,45 @@ function Isi() {
           {/* ── Draft belum selesai ── */}
           <div className="card">
             <div className="p-4 pb-2">
-              <p className="font-semibold text-heading text-sm">
-                Belum selesai
-                {d.draft.length > 0 && (
-                  <span className="ml-2 badge-warning">{d.draft.length}</span>
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-semibold text-heading text-sm">
+                  Belum selesai
+                  {d.draftTotal > 0 && (
+                    <span className="ml-2 badge-warning">{d.draftTotal}</span>
+                  )}
+                </p>
+                {isAdmin && d.draftTotal > 0 && (
+                  <button
+                    onClick={sapuDraft}
+                    disabled={menyapu}
+                    className="btn-ghost text-xs flex-shrink-0"
+                    title={`Buang semua draft kosong yang lebih tua dari ${d.draftUmurSapuJam} jam`}
+                  >
+                    {menyapu
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Brush className="w-3.5 h-3.5" />}
+                    Bersihkan
+                  </button>
                 )}
-              </p>
+              </div>
               <p className="text-xs text-gray-500 mt-0.5">
-                Resi yang sudah di-scan tapi belum pernah disimpan — biasanya PDT mati
-                atau operator keluar di tengah jalan. Barang dan status ditulis dalam
-                satu transaksi, jadi draft <em>seharusnya</em> selalu kosong. Tekan{" "}
-                <strong>Lihat isi</strong> untuk memastikan sendiri; kalau ternyata
-                berisi, ia bisa disimpan, bukan dibuang.
+                Resi yang sudah di-scan tapi belum pernah disimpan. Satu baris lahir
+                pada detik resi dibaca — itulah yang membuat jam scan bisa dipercaya —
+                jadi setiap sesi yang ditinggalkan meninggalkan satu di sini.
+                Barang dan status ditulis dalam satu transaksi, jadi draft{" "}
+                <em>seharusnya</em> selalu kosong; tekan <strong>Lihat isi</strong>{" "}
+                untuk memastikan sendiri.
               </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Yang kosong dan sudah lewat {d.draftUmurSapuJam} jam dibuang otomatis.
+                Sesi yang terputus sekarang juga dipulihkan sendiri di layar scan, jadi
+                daftar ini seharusnya tinggal berisi yang benar-benar hari ini.
+              </p>
+              {d.draftTotal > d.draft.length && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Menampilkan {d.draft.length} terbaru dari {d.draftTotal.toLocaleString("id-ID")}.
+                </p>
+              )}
             </div>
             {d.draft.length === 0 ? (
               <p className="text-sm text-gray-400 px-4 pb-4">Tidak ada. Bagus.</p>
@@ -381,7 +454,8 @@ function Isi() {
                     <div className="min-w-0">
                       <p className="font-mono text-heading truncate">{x.noResi}</p>
                       <p className="text-xs text-gray-400">
-                        {x.tanggal} {jamWIB(x.scannedAt)} · {x.oleh}
+                        {x.tanggal} {jamWIB(x.scannedAt)} · {x.oleh} ·{" "}
+                        {umurSingkat(x.scannedAt)}
                       </p>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">

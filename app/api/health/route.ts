@@ -105,11 +105,88 @@ export async function GET() {
         );
       }
 
+      /**
+       * ── Skema vs kode ──────────────────────────────────────────────────
+       *
+       * Ini yang paling sering menipu: aplikasinya sehat, database
+       * terhubung, login jalan, semua halaman baca berfungsi — tapi setiap
+       * penyimpanan gagal, karena kode sudah tahu kolom baru sementara
+       * database belum punya kolomnya.
+       *
+       * Penyebabnya hampir selalu sama: `npm run build` menjalankan
+       * `prisma generate` (yang MEMBUAT ULANG tipe dari file schema) tanpa
+       * pernah menjalankan `prisma db push` (yang MENGUBAH database). Jadi
+       * typecheck lolos, build lolos, deploy lolos — dan yang gagal hanya
+       * INSERT-nya, dengan pesan yang tidak menyebut sebabnya.
+       *
+       * Diperiksa lewat information_schema, bukan dengan mencoba menulis:
+       * pemeriksaan kesehatan tidak boleh meninggalkan data sampah.
+       */
+      const kolomWajib: { tabel: string; kolom: string; untuk: string }[] = [
+        { tabel: "bongkaran", kolom: "kamera", untuk: "nomor kamera CCTV" },
+        { tabel: "bongkaran", kolom: "klien_kunci", untuk: "simpan luring" },
+        { tabel: "users", kolom: "bisa_cancel_order", untuk: "izin Cancel Order" },
+        { tabel: "produk_barcode", kolom: "jenis", untuk: "barcode BPOM" },
+      ];
+      const tabelWajib = ["bongkaran", "bongkaran_item", "produk", "produk_barcode",
+                          "batch_sku", "cancel_order", "cancel_order_item"];
+
+      let skema: Record<string, unknown> = { diperiksa: false };
+      try {
+        const adaTabel = await prisma.$queryRawUnsafe<{ TABLE_NAME: string }[]>(
+          `SELECT TABLE_NAME FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()`
+        );
+        const namaTabel = new Set(adaTabel.map((t) => String(t.TABLE_NAME).toLowerCase()));
+
+        const adaKolom = await prisma.$queryRawUnsafe<
+          { TABLE_NAME: string; COLUMN_NAME: string }[]
+        >(
+          `SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()`
+        );
+        const pasangan = new Set(
+          adaKolom.map((c) =>
+            `${String(c.TABLE_NAME).toLowerCase()}.${String(c.COLUMN_NAME).toLowerCase()}`
+          )
+        );
+
+        const tabelHilang = tabelWajib.filter((t) => !namaTabel.has(t));
+        const kolomHilang = kolomWajib.filter(
+          (k) => namaTabel.has(k.tabel) && !pasangan.has(`${k.tabel}.${k.kolom}`)
+        );
+
+        skema = {
+          diperiksa: true,
+          tabelHilang,
+          kolomHilang: kolomHilang.map((k) => `${k.tabel}.${k.kolom} (${k.untuk})`),
+        };
+
+        if (tabelHilang.length > 0 || kolomHilang.length > 0) {
+          masalah.push(
+            "Database TERTINGGAL dari kode. " +
+              (tabelHilang.length ? `Tabel belum ada: ${tabelHilang.join(", ")}. ` : "") +
+              (kolomHilang.length
+                ? `Kolom belum ada: ${kolomHilang.map((k) => `${k.tabel}.${k.kolom}`).join(", ")}. `
+                : "") +
+              "Jalankan `npm run db:push` dari komputer Anda ke database yang SAMA " +
+              "dengan yang dipakai server ini, lalu coba lagi. Selama belum, " +
+              "membaca data tetap berhasil tapi setiap penyimpanan akan gagal."
+          );
+        }
+      } catch (e) {
+        skema = {
+          diperiksa: false,
+          error: String((e as Error)?.message ?? e).slice(0, 200),
+        };
+      }
+
       database = {
         terhubung: true,
         msPing,
         jumlahUser,
         jumlahExpedisi,
+        skema,
         catatan:
           msPing > 400
             ? "Ping tinggi — kemungkinan region Vercel jauh dari cluster database."
